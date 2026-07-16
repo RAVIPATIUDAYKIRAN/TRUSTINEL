@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "TRUSTINEL",
+  "version": "0.1.0",
+  "description": "Real-time trust verification engine for the web.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_title": "TRUSTINEL"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
