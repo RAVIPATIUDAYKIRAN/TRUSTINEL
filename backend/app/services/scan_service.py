@@ -79,9 +79,9 @@ class ScanService:
             # 8. Commit the transaction once
             await self.session.commit()
 
-            # 9. Refresh the WebsiteScan instance to reload relationships
-            await self.session.refresh(scan)
-            return scan
+            # 9. Load scan details with eager-loaded trust_report to prevent lazy loading issues during serialization
+            refreshed_scan = await self.scan_repo.get_scan_by_id(scan.id)
+            return refreshed_scan
 
         except Exception:
             # Rollback transaction on unexpected failures and propagate the error

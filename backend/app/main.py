@@ -24,6 +24,8 @@ from app.middleware.exceptions import (
 setup_logging()
 logger = logging.getLogger("trustinel.main")
 
+from app.api.scan import router as scan_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,6 +77,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+app.include_router(scan_router)
 
 
 @app.get("/health", tags=["System"])
