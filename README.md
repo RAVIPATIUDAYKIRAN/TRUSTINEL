@@ -112,6 +112,13 @@ TRUSTINEL/
 - **DevOps**: Docker, Docker Compose, GitHub Actions
 
 ## Roadmap
-- **Sprint 1**: Foundation & Development Environment (Current)
-- **Sprint 2**: Scanning & Basic Analysis Engine
-- **Sprint 3**: AI-powered Trust Assessment & UI Dashboard
+- **Sprint 1**: Foundation & Development Environment (Completed)
+- **Sprint 2**: Backend Core & Database Pipeline (Completed)
+  - FastAPI REST APIs (`POST /api/v1/scan`, `GET /api/v1/scan/{id}`)
+  - E2E Database integration (PostgreSQL) using SQLAlchemy 2.0 and Alembic migrations
+  - Implementation of Clean Architecture with Repository and Service patterns
+  - Timezone-aware metadata structures for Scans, Reports, and Audits
+  - Decoupled Mock Trust Report Generator interface
+  - Interactive OpenAPI documentation (Swagger UI / Redoc)
+- **Sprint 3**: AI-powered Trust Assessment, Analysis Engines & UI Dashboard (Next)
+
