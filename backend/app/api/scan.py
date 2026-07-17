@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
@@ -45,3 +46,45 @@ async def create_scan(
     
     # Delegate orchestration execution to ScanService
     return await service.create_scan(url=str(request.url))
+
+
+@router.get(
+    "/scan/{scan_id}",
+    response_model=ScanResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve scan details",
+    description="Retrieves the details and generated trust report of a scan by its unique scan ID."
+)
+async def get_scan(
+    scan_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+) -> ScanResponse:
+    """
+    HTTP GET route to retrieve scan details by UUID.
+    """
+    # Instantiate repositories
+    scan_repo = WebsiteScanRepository(db)
+    report_repo = TrustReportRepository(db)
+    history_repo = ScanHistoryRepository(db)
+    
+    # Instantiate mock generator
+    generator = MockTrustReportGenerator()
+    
+    # Instantiate scan service
+    service = ScanService(
+        session=db,
+        scan_repo=scan_repo,
+        report_repo=report_repo,
+        history_repo=history_repo,
+        generator=generator
+    )
+    
+    # Delegate query execution to ScanService
+    scan = await service.get_scan(scan_id=scan_id)
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scan with ID {scan_id} not found"
+        )
+    return scan
+
