@@ -46,3 +46,9 @@ This document records the foundational technical decisions made during the desig
 - **Context**: Application health checking must prove that critical database and cache engines are ready.
 - **Decision**: Health endpoint `/health` performs a query ping (`SELECT 1`) on PostgreSQL and a client ping (`PING`) on Redis asynchronously.
 - **Rationale**: Ensures robust checks for database & Redis readiness, not just checking if the HTTP server is running.
+
+### 7. Partitioning of Scan Analysis Logic: `app/analyzers/`
+- **Context**: Future website trust scanning will evaluate distinct indicators (SSL certificates, WHOIS registry metadata, HTTP response headers, redirect hops, external blacklists). Placing this logic inside a single scan service violates the Single Responsibility Principle and causes maintenance bottleneck.
+- **Decision**: Create a dedicated `app/analyzers/` package. Each analyzer module will remain decoupled, acting as pure logic components that compute specific metrics from collected metadata.
+- **Rationale**: Promotes highly reusable, unit-testable components that can be added, updated, or bypassed individually without modifying repositories, routing controllers, or database models.
+
