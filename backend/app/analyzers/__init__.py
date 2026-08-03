@@ -5,8 +5,11 @@
 # HTTP headers, DNS records, redirects, and reputation scores).
 
 from app.analyzers.base_analyzer import BaseAnalyzer
+from app.analyzers.ssl_analyzer import SSLAnalyzer
 
 __all__ = [
-    "BaseAnalyzer"
+    "BaseAnalyzer",
+    "SSLAnalyzer"
 ]
+
 
