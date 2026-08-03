@@ -6,10 +6,12 @@
 
 from app.analyzers.base_analyzer import BaseAnalyzer
 from app.analyzers.ssl_analyzer import SSLAnalyzer
+from app.analyzers.whois_analyzer import WHOISAnalyzer
 
 __all__ = [
     "BaseAnalyzer",
-    "SSLAnalyzer"
+    "SSLAnalyzer",
+    "WHOISAnalyzer"
 ]
 
 
