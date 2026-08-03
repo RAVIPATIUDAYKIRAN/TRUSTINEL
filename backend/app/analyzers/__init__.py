@@ -7,11 +7,13 @@
 from app.analyzers.base_analyzer import BaseAnalyzer
 from app.analyzers.ssl_analyzer import SSLAnalyzer
 from app.analyzers.whois_analyzer import WHOISAnalyzer
+from app.analyzers.header_analyzer import HeaderAnalyzer
 
 __all__ = [
     "BaseAnalyzer",
     "SSLAnalyzer",
-    "WHOISAnalyzer"
+    "WHOISAnalyzer",
+    "HeaderAnalyzer"
 ]
 
 
