@@ -3,6 +3,7 @@ from app.schemas.trust_report import TrustReportResponse
 from app.schemas.scan import ScanCreateRequest, ScanResponse
 from app.schemas.website_fetch import WebsiteFetchResult
 from app.schemas.ssl_analysis import SSLAnalysisResult
+from app.schemas.whois_analysis import WHOISAnalysisResult
 
 __all__ = [
     "ErrorResponse",
@@ -10,7 +11,9 @@ __all__ = [
     "ScanCreateRequest",
     "ScanResponse",
     "WebsiteFetchResult",
-    "SSLAnalysisResult"
+    "SSLAnalysisResult",
+    "WHOISAnalysisResult"
 ]
+
 
 
