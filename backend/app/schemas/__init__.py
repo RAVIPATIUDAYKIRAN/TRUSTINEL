@@ -6,6 +6,7 @@ from app.schemas.ssl_analysis import SSLAnalysisResult
 from app.schemas.whois_analysis import WHOISAnalysisResult
 from app.schemas.header_analysis import HeaderAnalysisResult
 from app.schemas.redirect_analysis import RedirectAnalysisResult
+from app.schemas.trust_evaluation import TrustEvaluationResult
 
 __all__ = [
     "ErrorResponse",
@@ -16,7 +17,8 @@ __all__ = [
     "SSLAnalysisResult",
     "WHOISAnalysisResult",
     "HeaderAnalysisResult",
-    "RedirectAnalysisResult"
+    "RedirectAnalysisResult",
+    "TrustEvaluationResult"
 ]
 
 
