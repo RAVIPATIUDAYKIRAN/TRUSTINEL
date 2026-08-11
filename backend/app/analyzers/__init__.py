@@ -8,12 +8,14 @@ from app.analyzers.base_analyzer import BaseAnalyzer
 from app.analyzers.ssl_analyzer import SSLAnalyzer
 from app.analyzers.whois_analyzer import WHOISAnalyzer
 from app.analyzers.header_analyzer import HeaderAnalyzer
+from app.analyzers.redirect_analyzer import RedirectAnalyzer
 
 __all__ = [
     "BaseAnalyzer",
     "SSLAnalyzer",
     "WHOISAnalyzer",
-    "HeaderAnalyzer"
+    "HeaderAnalyzer",
+    "RedirectAnalyzer"
 ]
 
 
