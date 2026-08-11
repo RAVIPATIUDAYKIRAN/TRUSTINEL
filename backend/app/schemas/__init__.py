@@ -7,6 +7,7 @@ from app.schemas.whois_analysis import WHOISAnalysisResult
 from app.schemas.header_analysis import HeaderAnalysisResult
 from app.schemas.redirect_analysis import RedirectAnalysisResult
 from app.schemas.trust_evaluation import TrustEvaluationResult
+from app.schemas.risk_explanation import RiskExplanationResult
 
 __all__ = [
     "ErrorResponse",
@@ -18,7 +19,8 @@ __all__ = [
     "WHOISAnalysisResult",
     "HeaderAnalysisResult",
     "RedirectAnalysisResult",
-    "TrustEvaluationResult"
+    "TrustEvaluationResult",
+    "RiskExplanationResult"
 ]
 
 
