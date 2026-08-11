@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, Text, Enum, CheckConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,6 +53,30 @@ class TrustReport(Base):
         nullable=False,
         server_default=func.now(),
         doc="Timestamp when the report was generated."
+    )
+    explanation: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc="Human-readable explanation of the trust evaluation."
+    )
+    key_risks: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc="JSON-serialized list of key security risks identified."
+    )
+    positive_signals: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc="JSON-serialized list of positive security indicators identified."
+    )
+    recommendation: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc="Concise user recommendation based on the trust evaluation."
     )
 
     # Relationships

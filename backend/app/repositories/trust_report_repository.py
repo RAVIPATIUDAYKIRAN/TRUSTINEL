@@ -1,5 +1,6 @@
+import json
 import uuid
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,16 +21,25 @@ class TrustReportRepository(BaseRepository):
         scan_id: uuid.UUID,
         trust_score: int,
         risk_level: RiskLevel,
-        summary: str
+        summary: str,
+        explanation: Optional[str] = None,
+        key_risks: Optional[List[str]] = None,
+        positive_signals: Optional[List[str]] = None,
+        recommendation: Optional[str] = None
     ) -> TrustReport:
         """
         Create and persist a new TrustReport linked to a scan.
+        Serializes key_risks and positive_signals as JSON strings.
         """
         report = TrustReport(
             scan_id=scan_id,
             trust_score=trust_score,
             risk_level=risk_level,
-            summary=summary
+            summary=summary,
+            explanation=explanation,
+            key_risks=json.dumps(key_risks) if key_risks is not None else None,
+            positive_signals=json.dumps(positive_signals) if positive_signals is not None else None,
+            recommendation=recommendation
         )
         self.add(report)
         await self.flush()

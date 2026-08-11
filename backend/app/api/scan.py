@@ -7,7 +7,13 @@ from app.schemas.scan import ScanCreateRequest, ScanResponse
 from app.repositories.website_scan_repository import WebsiteScanRepository
 from app.repositories.trust_report_repository import TrustReportRepository
 from app.repositories.scan_history_repository import ScanHistoryRepository
-from app.services.mock_trust_report_generator import MockTrustReportGenerator
+from app.services.website_fetcher import WebsiteFetcher
+from app.analyzers.ssl_analyzer import SSLAnalyzer
+from app.analyzers.whois_analyzer import WHOISAnalyzer
+from app.analyzers.header_analyzer import HeaderAnalyzer
+from app.analyzers.redirect_analyzer import RedirectAnalyzer
+from app.services.rule_based_trust_engine import RuleBasedTrustEngine
+from app.services.risk_explanation_service import RiskExplanationService
 from app.services.scan_service import ScanService
 
 router = APIRouter(prefix="/api/v1", tags=["Scan"])
@@ -18,32 +24,44 @@ router = APIRouter(prefix="/api/v1", tags=["Scan"])
     response_model=ScanResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Initiate website trust scan",
-    description="Initiates a new website scan, generates a mock trust report, and logs the transactions."
+    description="Initiates a new website scan, runs real security analyzers, and generates a trust report."
 )
 async def create_scan(
     request: ScanCreateRequest,
     db: AsyncSession = Depends(get_db)
 ) -> ScanResponse:
     """
-    HTTP POST route to coordinate scan initiation.
+    HTTP POST route to coordinate scan initiation using the real intelligence pipeline.
     """
     # Instantiate repositories
     scan_repo = WebsiteScanRepository(db)
     report_repo = TrustReportRepository(db)
     history_repo = ScanHistoryRepository(db)
-    
-    # Instantiate mock generator
-    generator = MockTrustReportGenerator()
-    
+
+    # Instantiate intelligence components
+    fetcher = WebsiteFetcher()
+    ssl_analyzer = SSLAnalyzer()
+    whois_analyzer = WHOISAnalyzer()
+    header_analyzer = HeaderAnalyzer()
+    redirect_analyzer = RedirectAnalyzer()
+    trust_engine = RuleBasedTrustEngine()
+    explanation_service = RiskExplanationService()
+
     # Instantiate scan service
     service = ScanService(
         session=db,
         scan_repo=scan_repo,
         report_repo=report_repo,
         history_repo=history_repo,
-        generator=generator
+        fetcher=fetcher,
+        ssl_analyzer=ssl_analyzer,
+        whois_analyzer=whois_analyzer,
+        header_analyzer=header_analyzer,
+        redirect_analyzer=redirect_analyzer,
+        trust_engine=trust_engine,
+        explanation_service=explanation_service,
     )
-    
+
     # Delegate orchestration execution to ScanService
     return await service.create_scan(url=str(request.url))
 
@@ -61,24 +79,38 @@ async def get_scan(
 ) -> ScanResponse:
     """
     HTTP GET route to retrieve scan details by UUID.
+    Only reads persisted data — does NOT execute analyzers or regenerate scores.
     """
     # Instantiate repositories
     scan_repo = WebsiteScanRepository(db)
     report_repo = TrustReportRepository(db)
     history_repo = ScanHistoryRepository(db)
-    
-    # Instantiate mock generator
-    generator = MockTrustReportGenerator()
-    
+
+    # Instantiate intelligence components (needed for ScanService constructor,
+    # but get_scan does NOT invoke them)
+    fetcher = WebsiteFetcher()
+    ssl_analyzer = SSLAnalyzer()
+    whois_analyzer = WHOISAnalyzer()
+    header_analyzer = HeaderAnalyzer()
+    redirect_analyzer = RedirectAnalyzer()
+    trust_engine = RuleBasedTrustEngine()
+    explanation_service = RiskExplanationService()
+
     # Instantiate scan service
     service = ScanService(
         session=db,
         scan_repo=scan_repo,
         report_repo=report_repo,
         history_repo=history_repo,
-        generator=generator
+        fetcher=fetcher,
+        ssl_analyzer=ssl_analyzer,
+        whois_analyzer=whois_analyzer,
+        header_analyzer=header_analyzer,
+        redirect_analyzer=redirect_analyzer,
+        trust_engine=trust_engine,
+        explanation_service=explanation_service,
     )
-    
+
     # Delegate query execution to ScanService
     scan = await service.get_scan(scan_id=scan_id)
     if not scan:
@@ -87,4 +119,3 @@ async def get_scan(
             detail=f"Scan with ID {scan_id} not found"
         )
     return scan
-
