@@ -18,6 +18,7 @@ import {
 } from "../../lib/types";
 import TrustScore from "./components/TrustScore";
 import SecurityDetails from "./components/SecurityDetails";
+import RiskWarning from "./components/RiskWarning";
 
 type AppState = "IDLE" | "SCANNING" | "RESULT" | "ERROR" | "UNSUPPORTED";
 
@@ -416,6 +417,9 @@ function App() {
                 </span>
               </div>
             )}
+
+            {/* Risk Warning & Protection UX */}
+            <RiskWarning report={scanResult.trust_report} isStale={cacheStatus === "STALE"} />
 
             {/* Trust Score */}
             <div className="flex justify-center">
