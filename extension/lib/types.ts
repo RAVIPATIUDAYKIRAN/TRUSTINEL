@@ -26,6 +26,16 @@ export interface CachedScanResult {
   scanResponse: ScanResponse;
 }
 
+/** Lightweight history entry (no full scanResponse to keep storage small) */
+export interface ScanHistoryEntry {
+  domain: string;
+  scanId: string;
+  trustScore: number;
+  riskLevel: TrustReport["risk_level"];
+  summary: string;
+  scannedAt: string;
+}
+
 /** Domain state visible to the popup */
 export interface DomainState {
   domain: string;
@@ -33,6 +43,7 @@ export interface DomainState {
   state: ScanState;
   error?: string;
   cached?: CachedScanResult;
+  cacheStatus?: CacheStatus;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +60,19 @@ export interface GetDomainStateMessage {
   url: string;
 }
 
-export type PopupMessage = ScanCurrentTabMessage | GetDomainStateMessage;
+export interface GetScanHistoryMessage {
+  type: "GET_SCAN_HISTORY";
+}
+
+export interface ClearScanHistoryMessage {
+  type: "CLEAR_SCAN_HISTORY";
+}
+
+export type PopupMessage =
+  | ScanCurrentTabMessage
+  | GetDomainStateMessage
+  | GetScanHistoryMessage
+  | ClearScanHistoryMessage;
 
 // ---------------------------------------------------------------------------
 // Messages: Background → Popup (responses)
@@ -70,6 +93,16 @@ export type ScanMessageResponse = ScanSuccessResponse | ScanErrorResponse;
 export interface DomainStateResponse {
   type: "DOMAIN_STATE";
   state: DomainState;
+}
+
+export interface ScanHistoryResponse {
+  type: "SCAN_HISTORY";
+  history: ScanHistoryEntry[];
+}
+
+export interface ClearHistoryResponse {
+  type: "HISTORY_CLEARED";
+  success: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,4 +145,23 @@ export const CACHE_KEY_PREFIX = "trustinel_cache_";
 
 export function cacheKey(domain: string): string {
   return `${CACHE_KEY_PREFIX}${domain}`;
+}
+
+/** Storage key for recent scan history */
+export const SCAN_HISTORY_KEY = "trustinel_scan_history";
+
+/** Maximum number of history entries to keep */
+export const MAX_HISTORY = 10;
+
+/** Cache TTL: 10 minutes */
+export const SCAN_CACHE_TTL_MS = 10 * 60 * 1000;
+
+/** Cache freshness status */
+export type CacheStatus = "FRESH" | "STALE" | "MISSING";
+
+/** Determine whether a cached result is still fresh */
+export function getCacheStatus(cached: CachedScanResult | undefined | null): CacheStatus {
+  if (!cached?.scannedAt) return "MISSING";
+  const age = Date.now() - new Date(cached.scannedAt).getTime();
+  return age < SCAN_CACHE_TTL_MS ? "FRESH" : "STALE";
 }
