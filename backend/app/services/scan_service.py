@@ -103,14 +103,18 @@ class ScanService:
                 redirect_result=redirect_result
             )
 
-            # 8. Generate risk explanation (deterministic fallback if AI disabled)
-            risk_explanation = await self.explanation_service.explain(
-                trust_evaluation=trust_evaluation,
-                ssl_result=ssl_result,
-                whois_result=whois_result,
-                header_result=header_result,
-                redirect_result=redirect_result
-            )
+            # 8. Generate risk explanation (deterministic fallback if AI disabled or error)
+            try:
+                risk_explanation = await self.explanation_service.explain(
+                    trust_evaluation=trust_evaluation,
+                    ssl_result=ssl_result,
+                    whois_result=whois_result,
+                    header_result=header_result,
+                    redirect_result=redirect_result
+                )
+            except Exception as exc:
+                logger.warning(f"[TRUSTINEL] Risk explanation service exception: {exc}. Using fallback.")
+                risk_explanation = RiskExplanationService._get_fallback_explanation(trust_evaluation)
 
             # 8.5 Run AI threat analysis (uses existing evidence, never overrides deterministic score)
             try:

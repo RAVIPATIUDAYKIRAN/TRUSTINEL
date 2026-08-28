@@ -17,6 +17,15 @@ from app.services.ai_threat_analysis_service import (
 )
 
 
+@pytest.fixture(autouse=True)
+def clear_caches():
+    AIThreatAnalysisService._in_memory_cache.clear()
+    with patch("app.services.ai_threat_analysis_service.redis_client.get", new_callable=AsyncMock, return_value=None), \
+         patch("app.services.ai_threat_analysis_service.redis_client.set", new_callable=AsyncMock, return_value=True):
+        yield
+    AIThreatAnalysisService._in_memory_cache.clear()
+
+
 @pytest.fixture
 def sample_evidence_fixtures():
     ssl_res = SSLAnalysisResult(is_valid=True, error=None)

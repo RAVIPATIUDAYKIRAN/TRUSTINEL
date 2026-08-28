@@ -19,6 +19,7 @@ import {
 import TrustScore from "./components/TrustScore";
 import SecurityDetails from "./components/SecurityDetails";
 import RiskWarning from "./components/RiskWarning";
+import AIThreatAnalysis from "./components/AIThreatAnalysis";
 
 type AppState = "IDLE" | "SCANNING" | "RESULT" | "ERROR" | "UNSUPPORTED";
 
@@ -430,6 +431,9 @@ function App() {
             <div className="flex justify-center">
               <TrustScore report={scanResult.trust_report} />
             </div>
+
+            {/* AI Threat Analysis */}
+            <AIThreatAnalysis aiThreat={scanResult.trust_report.ai_threat_analysis} />
 
             {/* Summary */}
             <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60">

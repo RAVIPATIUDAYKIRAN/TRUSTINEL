@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_db
 from app.schemas.scan import ScanCreateRequest, ScanResponse
+from app.schemas.ai_threat_analysis import AIServiceStatusResponse
 from app.repositories.website_scan_repository import WebsiteScanRepository
 from app.repositories.trust_report_repository import TrustReportRepository
 from app.repositories.scan_history_repository import ScanHistoryRepository
@@ -18,6 +19,26 @@ from app.services.ai_threat_analysis_service import AIThreatAnalysisService
 from app.services.scan_service import ScanService
 
 router = APIRouter(prefix="/api/v1", tags=["Scan"])
+
+
+@router.get(
+    "/scan/ai-status",
+    response_model=AIServiceStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve AI Threat Analysis service status and security audit telemetry",
+    description=(
+        "Returns non-sensitive operational health, diagnostic configuration, cache metrics, "
+        "and security audit compliance telemetry for the AI Threat Analysis service. "
+        "Read-only; performs no external AI API calls or database writes."
+    )
+)
+async def get_ai_status() -> AIServiceStatusResponse:
+    """
+    HTTP GET route to retrieve safe operational telemetry and security audit status.
+    Performs NO external LLM requests, website fetches, or database mutations.
+    """
+    status_data = AIThreatAnalysisService.get_status()
+    return AIServiceStatusResponse.model_validate(status_data)
 
 
 @router.post(

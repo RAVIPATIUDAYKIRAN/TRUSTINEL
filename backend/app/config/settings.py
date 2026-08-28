@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     AI_THREAT_ANALYSIS_MODEL: str = ""
     AI_THREAT_ANALYSIS_API_KEY: Optional[str] = None
     AI_THREAT_ANALYSIS_TIMEOUT_SECONDS: float = 10.0
+    AI_THREAT_ANALYSIS_CACHE_TTL_SECONDS: int = 600
 
 
 settings = Settings()

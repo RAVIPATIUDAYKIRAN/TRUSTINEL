@@ -3,6 +3,22 @@
 
 const API_BASE_URL = "http://127.0.0.1:8000";
 
+export interface AIEvidenceMapping {
+  category: "SSL" | "WHOIS" | "SECURITY_HEADERS" | "REDIRECTS" | "DETERMINISTIC_TRUST" | string;
+  finding: string;
+  impact: string;
+}
+
+export interface AIThreatAnalysisResult {
+  enabled: boolean;
+  threat_level: "LOW" | "MEDIUM" | "HIGH" | "UNKNOWN";
+  confidence: number;
+  suspicious_indicators: string[];
+  reasoning: string;
+  recommended_action: string;
+  evidence_mappings: AIEvidenceMapping[];
+}
+
 export interface TrustReport {
   id: string;
   scan_id: string;
@@ -14,6 +30,7 @@ export interface TrustReport {
   key_risks: string[];
   positive_signals: string[];
   recommendation: string | null;
+  ai_threat_analysis?: AIThreatAnalysisResult | null;
 }
 
 export interface ScanResponse {
