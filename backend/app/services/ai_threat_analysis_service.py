@@ -8,7 +8,8 @@ the deterministic trust score or risk level.
 import abc
 import json
 import logging
-from typing import Any, Dict, List
+import time
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -39,6 +40,7 @@ class AIThreatProvider(abc.ABC):
         model: str,
         api_key: str,
         evidence: Dict[str, Any],
+        timeout: float = 10.0,
     ) -> AIThreatAnalysisResult:
         """
         Sends structured evidence to an AI provider and returns a validated
@@ -55,7 +57,6 @@ class OpenAIThreatProvider(AIThreatProvider):
     """
 
     API_URL = "https://api.openai.com/v1/chat/completions"
-    TIMEOUT_SECONDS = 10.0
 
     SYSTEM_PROMPT = (
         "You are an expert website security threat analyst. You will receive structured "
@@ -92,6 +93,7 @@ class OpenAIThreatProvider(AIThreatProvider):
         model: str,
         api_key: str,
         evidence: Dict[str, Any],
+        timeout: float = 10.0,
     ) -> AIThreatAnalysisResult:
         user_message = (
             "Analyze the following website security evidence for potential threats. "
@@ -109,25 +111,49 @@ class OpenAIThreatProvider(AIThreatProvider):
             "response_format": {"type": "json_object"},
         }
 
-        async with httpx.AsyncClient(timeout=self.TIMEOUT_SECONDS) as client:
-            response = await client.post(
-                self.API_URL,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
-            response.raise_for_status()
+        start_time = time.monotonic()
 
-        data = response.json()
-        content = data["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    self.API_URL,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                response.raise_for_status()
 
-        if isinstance(parsed, dict):
-            parsed["enabled"] = True
+            duration = time.monotonic() - start_time
+            logger.info(f"[TRUSTINEL] OpenAI AI threat analysis call succeeded in {duration:.2f}s using model '{model}'.")
 
-        return AIThreatAnalysisResult.model_validate(parsed)
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            parsed = json.loads(content)
+
+            if isinstance(parsed, dict):
+                parsed["enabled"] = True
+
+            return AIThreatAnalysisResult.model_validate(parsed)
+
+        except httpx.TimeoutException as exc:
+            duration = time.monotonic() - start_time
+            logger.warning(f"[TRUSTINEL] OpenAI AI threat request timed out after {duration:.2f}s (timeout={timeout}s).")
+            raise TimeoutError(f"AI provider request timed out after {timeout}s") from exc
+
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            logger.warning(f"[TRUSTINEL] OpenAI AI threat request failed with HTTP {status_code}.")
+            raise RuntimeError(f"AI provider returned HTTP status {status_code}") from exc
+
+        except httpx.RequestError as exc:
+            logger.warning(f"[TRUSTINEL] OpenAI AI threat network request error: {exc}.")
+            raise RuntimeError(f"AI provider network connection failed: {exc}") from exc
+
+        except (json.JSONDecodeError, KeyError, Exception) as exc:
+            logger.warning(f"[TRUSTINEL] OpenAI AI threat response parsing failed: {exc}.")
+            raise ValueError(f"AI provider returned invalid or malformed output: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -161,29 +187,62 @@ class AIThreatAnalysisService:
             header_result, redirect_result
         )
 
-        if self._is_ai_enabled():
-            try:
-                provider = self._providers.get(settings.AI_THREAT_ANALYSIS_PROVIDER)
-                if provider is None:
-                    logger.warning(
-                        f"Unknown AI threat provider '{settings.AI_THREAT_ANALYSIS_PROVIDER}', "
-                        "using deterministic fallback."
-                    )
-                    return self._get_fallback(trust_evaluation)
+        if not settings.AI_THREAT_ANALYSIS_ENABLED:
+            logger.info("[TRUSTINEL] AI Threat Analysis is disabled by configuration. Returning fallback.")
+            return self._get_fallback(trust_evaluation)
 
-                return await provider.analyze_threat(
-                    model=settings.AI_THREAT_ANALYSIS_MODEL,
-                    api_key=settings.AI_THREAT_ANALYSIS_API_KEY or "",
-                    evidence=evidence,
-                )
-            except Exception as exc:
-                logger.warning(
-                    f"AI threat analysis provider failed: {exc}. "
-                    "Returning deterministic fallback."
-                )
-                return self._get_fallback(trust_evaluation)
+        if not settings.AI_THREAT_ANALYSIS_API_KEY:
+            logger.warning("[TRUSTINEL] AI Threat Analysis enabled but AI_THREAT_ANALYSIS_API_KEY is missing. Returning fallback.")
+            return self._get_fallback(trust_evaluation)
 
-        return self._get_fallback(trust_evaluation)
+        if not settings.AI_THREAT_ANALYSIS_MODEL:
+            logger.warning("[TRUSTINEL] AI Threat Analysis enabled but AI_THREAT_ANALYSIS_MODEL is missing. Returning fallback.")
+            return self._get_fallback(trust_evaluation)
+
+        provider_name = (settings.AI_THREAT_ANALYSIS_PROVIDER or "").lower()
+        provider = self._providers.get(provider_name)
+        if provider is None:
+            logger.warning(
+                f"[TRUSTINEL] Unsupported AI threat provider '{settings.AI_THREAT_ANALYSIS_PROVIDER}'. "
+                "Returning deterministic fallback."
+            )
+            return self._get_fallback(trust_evaluation)
+
+        timeout = self._get_validated_timeout()
+
+        try:
+            return await provider.analyze_threat(
+                model=settings.AI_THREAT_ANALYSIS_MODEL,
+                api_key=settings.AI_THREAT_ANALYSIS_API_KEY,
+                evidence=evidence,
+                timeout=timeout,
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[TRUSTINEL] AI threat analysis provider '{provider_name}' failed: {exc}. "
+                "Returning deterministic fallback."
+            )
+            return self._get_fallback(trust_evaluation)
+
+    # ------------------------------------------------------------------
+    # Observability & Status Helper
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def get_status(cls) -> Dict[str, Any]:
+        """
+        Returns a safe, non-sensitive summary of the AI Threat Analysis service configuration status.
+        NEVER returns API keys or secrets.
+        """
+        enabled = cls._is_ai_enabled()
+        return {
+            "enabled": enabled,
+            "provider": settings.AI_THREAT_ANALYSIS_PROVIDER,
+            "model": settings.AI_THREAT_ANALYSIS_MODEL,
+            "model_configured": bool(settings.AI_THREAT_ANALYSIS_MODEL),
+            "api_key_configured": bool(settings.AI_THREAT_ANALYSIS_API_KEY),
+            "timeout_seconds": cls._get_validated_timeout(),
+        }
 
     # ------------------------------------------------------------------
     # Evidence Builder
@@ -228,7 +287,7 @@ class AIThreatAnalysisService:
         }
 
     # ------------------------------------------------------------------
-    # Feature Gate
+    # Configuration Helpers
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -237,7 +296,19 @@ class AIThreatAnalysisService:
             settings.AI_THREAT_ANALYSIS_ENABLED
             and bool(settings.AI_THREAT_ANALYSIS_API_KEY)
             and bool(settings.AI_THREAT_ANALYSIS_MODEL)
+            and bool(settings.AI_THREAT_ANALYSIS_PROVIDER in AIThreatAnalysisService._providers)
         )
+
+    @staticmethod
+    def _get_validated_timeout() -> float:
+        timeout = getattr(settings, "AI_THREAT_ANALYSIS_TIMEOUT_SECONDS", 10.0)
+        try:
+            val = float(timeout)
+            if val < 1.0 or val > 60.0:
+                return 10.0
+            return val
+        except (TypeError, ValueError):
+            return 10.0
 
     # ------------------------------------------------------------------
     # Deterministic Fallback

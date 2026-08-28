@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     AI_THREAT_ANALYSIS_PROVIDER: str = "openai"
     AI_THREAT_ANALYSIS_MODEL: str = ""
     AI_THREAT_ANALYSIS_API_KEY: Optional[str] = None
+    AI_THREAT_ANALYSIS_TIMEOUT_SECONDS: float = 10.0
 
 
 settings = Settings()
