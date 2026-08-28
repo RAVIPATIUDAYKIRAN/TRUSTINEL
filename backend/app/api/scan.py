@@ -14,6 +14,7 @@ from app.analyzers.header_analyzer import HeaderAnalyzer
 from app.analyzers.redirect_analyzer import RedirectAnalyzer
 from app.services.rule_based_trust_engine import RuleBasedTrustEngine
 from app.services.risk_explanation_service import RiskExplanationService
+from app.services.ai_threat_analysis_service import AIThreatAnalysisService
 from app.services.scan_service import ScanService
 
 router = APIRouter(prefix="/api/v1", tags=["Scan"])
@@ -46,6 +47,7 @@ async def create_scan(
     redirect_analyzer = RedirectAnalyzer()
     trust_engine = RuleBasedTrustEngine()
     explanation_service = RiskExplanationService()
+    ai_threat_service = AIThreatAnalysisService()
 
     # Instantiate scan service
     service = ScanService(
@@ -60,6 +62,7 @@ async def create_scan(
         redirect_analyzer=redirect_analyzer,
         trust_engine=trust_engine,
         explanation_service=explanation_service,
+        ai_threat_service=ai_threat_service,
     )
 
     # Delegate orchestration execution to ScanService

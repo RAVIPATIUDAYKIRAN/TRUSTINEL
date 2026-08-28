@@ -25,6 +25,9 @@ def _safe_deserialize_list(value: Any) -> List[str]:
     return []
 
 
+from app.schemas.ai_threat_analysis import AIThreatAnalysisResult
+
+
 class TrustReportResponse(BaseModel):
     """
     Schema for trust evaluation reports.
@@ -39,6 +42,7 @@ class TrustReportResponse(BaseModel):
     key_risks: List[str] = Field(default_factory=list, description="Key security risks identified during analysis.")
     positive_signals: List[str] = Field(default_factory=list, description="Positive security indicators identified during analysis.")
     recommendation: Optional[str] = Field(None, description="Concise recommendation for the user.")
+    ai_threat_analysis: Optional[AIThreatAnalysisResult] = Field(None, description="AI-assisted threat analysis result.")
 
     @model_validator(mode='before')
     @classmethod

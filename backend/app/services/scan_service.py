@@ -16,6 +16,7 @@ from app.analyzers.header_analyzer import HeaderAnalyzer
 from app.analyzers.redirect_analyzer import RedirectAnalyzer
 from app.services.rule_based_trust_engine import RuleBasedTrustEngine
 from app.services.risk_explanation_service import RiskExplanationService
+from app.services.ai_threat_analysis_service import AIThreatAnalysisService
 
 logger = logging.getLogger("trustinel.services.scan_service")
 
@@ -23,7 +24,8 @@ logger = logging.getLogger("trustinel.services.scan_service")
 class ScanService:
     """
     Service class responsible for orchestrating the complete website scan workflow
-    using real intelligence analyzers and managing database transaction lifecycles.
+    using real intelligence analyzers, AI threat analysis, and managing database
+    transaction lifecycles.
     """
     def __init__(
         self,
@@ -38,6 +40,7 @@ class ScanService:
         redirect_analyzer: RedirectAnalyzer,
         trust_engine: RuleBasedTrustEngine,
         explanation_service: RiskExplanationService,
+        ai_threat_service: Optional[AIThreatAnalysisService] = None,
     ) -> None:
         self.session = session
         self.scan_repo = scan_repo
@@ -50,12 +53,14 @@ class ScanService:
         self.redirect_analyzer = redirect_analyzer
         self.trust_engine = trust_engine
         self.explanation_service = explanation_service
+        self.ai_threat_service = ai_threat_service or AIThreatAnalysisService()
 
     async def create_scan(self, url: str) -> WebsiteScan:
         """
         Orchestrates the transactional sequence of creating a scan,
         running real analyzers, computing a trust score, generating
-        an explanation, persisting results, and completing the scan.
+        an explanation, running AI threat analysis, persisting results,
+        and completing the scan.
         """
         # 1. Normalize the URL
         normalized_url = url.strip()
@@ -107,6 +112,24 @@ class ScanService:
                 redirect_result=redirect_result
             )
 
+            # 8.5 Run AI threat analysis (uses existing evidence, never overrides deterministic score)
+            try:
+                ai_threat = await self.ai_threat_service.analyze(
+                    trust_evaluation=trust_evaluation,
+                    ssl_result=ssl_result,
+                    whois_result=whois_result,
+                    header_result=header_result,
+                    redirect_result=redirect_result
+                )
+            except Exception as exc:
+                logger.warning(f"AI threat analysis service exception: {exc}. Using fallback.")
+                ai_threat = AIThreatAnalysisService._get_fallback(trust_evaluation)
+
+            logger.info(
+                f"[TRUSTINEL] AI Threat Analysis complete for {domain}. "
+                f"Enabled={ai_threat.enabled}, ThreatLevel={ai_threat.threat_level}, Confidence={ai_threat.confidence}"
+            )
+
             # 9. Persist TrustReport with deterministic score + explanation
             await self.report_repo.create_report(
                 scan_id=scan.id,
@@ -135,8 +158,11 @@ class ScanService:
             # 12. Commit the transaction once
             await self.session.commit()
 
-            # 13. Load scan with eager-loaded trust_report
+            # 13. Load scan with eager-loaded trust_report and attach in-memory AI threat analysis
             refreshed_scan = await self.scan_repo.get_scan_by_id(scan.id)
+            if refreshed_scan and refreshed_scan.trust_report:
+                object.__setattr__(refreshed_scan.trust_report, "ai_threat_analysis", ai_threat)
+
             return refreshed_scan
 
         except Exception:
