@@ -37,19 +37,24 @@ export class ApiError extends Error {
 }
 
 export async function scanWebsite(url: string): Promise<ScanResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}/api/v1/scan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
+      signal: controller.signal,
     });
   } catch (err) {
+    clearTimeout(timeoutId);
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new ApiError("Request was cancelled.");
+      throw new ApiError("Request timed out waiting for analysis server response.");
     }
     throw new ApiError("Could not reach the TRUSTINEL analysis server. Is the backend running?");
   }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     let detail = `Server returned ${response.status}`;
@@ -68,12 +73,21 @@ export async function scanWebsite(url: string): Promise<ScanResponse> {
 }
 
 export async function getScan(scanId: string): Promise<ScanResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}/api/v1/scan/${scanId}`);
-  } catch {
+    response = await fetch(`${API_BASE_URL}/api/v1/scan/${scanId}`, {
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("Request timed out waiting for analysis server response.");
+    }
     throw new ApiError("Could not reach the TRUSTINEL analysis server. Is the backend running?");
   }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     let detail = `Server returned ${response.status}`;

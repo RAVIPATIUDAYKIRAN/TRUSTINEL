@@ -40,15 +40,27 @@ const autoScannedDomains = new Set<string>();
 // ---------------------------------------------------------------------------
 
 async function getCachedResult(domain: string): Promise<CachedScanResult | undefined> {
-  const key = cacheKey(domain);
-  const data = await chrome.storage.local.get(key);
-  return data[key] as CachedScanResult | undefined;
+  try {
+    const key = cacheKey(domain);
+    const data = await chrome.storage.local.get(key);
+    const cached = data[key] as CachedScanResult | undefined;
+    if (cached && typeof cached === "object" && cached.scanResponse && cached.riskLevel) {
+      return cached;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function setCachedResult(domain: string, result: CachedScanResult): Promise<void> {
-  const key = cacheKey(domain);
-  await chrome.storage.local.set({ [key]: result });
-  console.log("[TRUSTINEL] Cached result for:", domain);
+  try {
+    const key = cacheKey(domain);
+    await chrome.storage.local.set({ [key]: result });
+    console.log("[TRUSTINEL] Cached result for:", domain);
+  } catch (err) {
+    console.error("[TRUSTINEL] Error caching result:", err);
+  }
 }
 
 function buildCachedResult(domain: string, url: string, scan: ScanResponse): CachedScanResult {
@@ -78,7 +90,10 @@ async function getScanHistory(): Promise<ScanHistoryEntry[]> {
     const data = await chrome.storage.local.get(SCAN_HISTORY_KEY);
     const history = data[SCAN_HISTORY_KEY];
     if (Array.isArray(history)) {
-      return history as ScanHistoryEntry[];
+      // Validate array elements
+      return history.filter(
+        (h) => h && typeof h === "object" && typeof h.domain === "string" && typeof h.trustScore === "number"
+      ) as ScanHistoryEntry[];
     }
     return [];
   } catch {
@@ -87,17 +102,25 @@ async function getScanHistory(): Promise<ScanHistoryEntry[]> {
 }
 
 async function addToHistory(entry: ScanHistoryEntry): Promise<void> {
-  const history = await getScanHistory();
-  const filtered = history.filter((h) => h.domain !== entry.domain);
-  filtered.unshift(entry);
-  const trimmed = filtered.slice(0, MAX_HISTORY);
-  await chrome.storage.local.set({ [SCAN_HISTORY_KEY]: trimmed });
-  console.log("[TRUSTINEL] History updated. Entries:", trimmed.length);
+  try {
+    const history = await getScanHistory();
+    const filtered = history.filter((h) => h.domain !== entry.domain);
+    filtered.unshift(entry);
+    const trimmed = filtered.slice(0, MAX_HISTORY);
+    await chrome.storage.local.set({ [SCAN_HISTORY_KEY]: trimmed });
+    console.log("[TRUSTINEL] History updated. Entries:", trimmed.length);
+  } catch (err) {
+    console.error("[TRUSTINEL] Error updating history:", err);
+  }
 }
 
 async function clearHistory(): Promise<void> {
-  await chrome.storage.local.remove(SCAN_HISTORY_KEY);
-  console.log("[TRUSTINEL] Scan history cleared.");
+  try {
+    await chrome.storage.local.remove(SCAN_HISTORY_KEY);
+    console.log("[TRUSTINEL] Scan history cleared.");
+  } catch (err) {
+    console.error("[TRUSTINEL] Error clearing history:", err);
+  }
 }
 
 function buildHistoryEntry(domain: string, scan: ScanResponse): ScanHistoryEntry {
@@ -167,12 +190,12 @@ async function updateBadgeForTab(tabId: number, url: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Domain state builder (now includes cacheStatus)
+// Domain state builder (includes cacheStatus)
 // ---------------------------------------------------------------------------
 
 async function getDomainState(url: string): Promise<DomainState> {
   if (!url || isUnsupportedUrl(url)) {
-    return { domain: "", url, state: "UNSUPPORTED" };
+    return { domain: "", url: url || "", state: "UNSUPPORTED" };
   }
 
   const domain = normalizeDomain(url);
@@ -206,7 +229,11 @@ async function performScan(
 
   if (scanningDomains.has(domain)) {
     console.log("[TRUSTINEL] Scan already in progress for:", domain);
-    sendResponse({ success: false, error: "A scan is already in progress for this domain." });
+    try {
+      sendResponse({ success: false, error: "A scan is already in progress for this domain." });
+    } catch {
+      // Channel closed
+    }
     return;
   }
 
@@ -236,14 +263,22 @@ async function performScan(
       }
     }
 
-    sendResponse({ success: true, data });
+    try {
+      sendResponse({ success: true, data });
+    } catch {
+      // Channel closed
+    }
   } catch (err) {
     const errorMessage =
       err instanceof ApiError
         ? err.message
         : "An unexpected error occurred during the scan.";
     console.error("[TRUSTINEL] Scan failed:", errorMessage);
-    sendResponse({ success: false, error: errorMessage });
+    try {
+      sendResponse({ success: false, error: errorMessage });
+    } catch {
+      // Channel closed
+    }
 
     // On failure, restore badge from cache or reset to unknown
     if (activeTabId) {
@@ -363,9 +398,12 @@ chrome.runtime.onMessage.addListener(function (
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response: AnyResponse) => void
 ): boolean {
+  if (!message || typeof message !== "object" || !message.type) {
+    return false;
+  }
+
   if (message.type === "SCAN_CURRENT_TAB" && message.url) {
     console.log("[TRUSTINEL] Received SCAN_CURRENT_TAB:", message.url);
-    // Manual scan: mark as auto-scanned to prevent duplicate auto-scan after
     const domain = normalizeDomain(message.url);
     if (domain) autoScannedDomains.add(domain);
     performScan(message.url, sendResponse as (r: ScanMessageResponse) => void);
@@ -374,25 +412,61 @@ chrome.runtime.onMessage.addListener(function (
 
   if (message.type === "GET_DOMAIN_STATE" && message.url) {
     console.log("[TRUSTINEL] Received GET_DOMAIN_STATE:", message.url);
-    getDomainState(message.url).then((state) => {
-      sendResponse({ type: "DOMAIN_STATE", state });
-    });
+    getDomainState(message.url)
+      .then((state) => {
+        try {
+          sendResponse({ type: "DOMAIN_STATE", state });
+        } catch {
+          // Channel closed
+        }
+      })
+      .catch(() => {
+        try {
+          sendResponse({ type: "DOMAIN_STATE", state: { domain: "", url: message.url, state: "IDLE" } });
+        } catch {
+          // Channel closed
+        }
+      });
     return true;
   }
 
   if (message.type === "GET_SCAN_HISTORY") {
     console.log("[TRUSTINEL] Received GET_SCAN_HISTORY");
-    getScanHistory().then((history) => {
-      sendResponse({ type: "SCAN_HISTORY", history });
-    });
+    getScanHistory()
+      .then((history) => {
+        try {
+          sendResponse({ type: "SCAN_HISTORY", history });
+        } catch {
+          // Channel closed
+        }
+      })
+      .catch(() => {
+        try {
+          sendResponse({ type: "SCAN_HISTORY", history: [] });
+        } catch {
+          // Channel closed
+        }
+      });
     return true;
   }
 
   if (message.type === "CLEAR_SCAN_HISTORY") {
     console.log("[TRUSTINEL] Received CLEAR_SCAN_HISTORY");
-    clearHistory().then(() => {
-      sendResponse({ type: "HISTORY_CLEARED", success: true });
-    });
+    clearHistory()
+      .then(() => {
+        try {
+          sendResponse({ type: "HISTORY_CLEARED", success: true });
+        } catch {
+          // Channel closed
+        }
+      })
+      .catch(() => {
+        try {
+          sendResponse({ type: "HISTORY_CLEARED", success: false });
+        } catch {
+          // Channel closed
+        }
+      });
     return true;
   }
 
@@ -421,6 +495,13 @@ chrome.tabs.onActivated.addListener(async (activeInfo: chrome.tabs.TabActiveInfo
     }
   } catch {
     // Tab may have been closed between activation and get
+  }
+});
+
+// Re-initialize active tab badge on worker startup/wake
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+  if (tabs[0]?.id && tabs[0]?.url) {
+    updateBadgeForTab(tabs[0].id, tabs[0].url);
   }
 });
 

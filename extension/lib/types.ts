@@ -127,10 +127,15 @@ export function isUnsupportedUrl(url: string): boolean {
 }
 
 export function extractHostname(url: string): string {
+  if (!url) return "";
   try {
     return new URL(url).hostname;
   } catch {
-    return "";
+    try {
+      return new URL(`http://${url}`).hostname;
+    } catch {
+      return "";
+    }
   }
 }
 
@@ -162,6 +167,9 @@ export type CacheStatus = "FRESH" | "STALE" | "MISSING";
 /** Determine whether a cached result is still fresh */
 export function getCacheStatus(cached: CachedScanResult | undefined | null): CacheStatus {
   if (!cached?.scannedAt) return "MISSING";
-  const age = Date.now() - new Date(cached.scannedAt).getTime();
+  const timestamp = new Date(cached.scannedAt).getTime();
+  if (isNaN(timestamp)) return "MISSING";
+  const age = Date.now() - timestamp;
+  if (age < 0) return "FRESH";
   return age < SCAN_CACHE_TTL_MS ? "FRESH" : "STALE";
 }

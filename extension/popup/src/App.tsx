@@ -179,37 +179,42 @@ function App() {
 
   // Detect active tab URL and load cached state + history
   useEffect(() => {
-    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      const url = tabs[0]?.url || "";
-      setTabUrl(url);
-      setHostname(extractHostname(url));
+    try {
+      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+        const url = tabs?.[0]?.url || "";
+        setTabUrl(url);
+        setHostname(extractHostname(url));
 
-      if (!url || isUnsupportedUrl(url)) {
-        setState("UNSUPPORTED");
+        if (!url || isUnsupportedUrl(url)) {
+          setState("UNSUPPORTED");
+          loadHistory();
+          return;
+        }
+
+        console.log("[TRUSTINEL] Popup opened for:", extractHostname(url));
+
+        const domainState = await requestDomainState(url);
+
+        if (domainState.state === "COMPLETED" && domainState.cached) {
+          console.log("[TRUSTINEL] Loaded cached result for:", domainState.domain);
+          setScanResult(domainState.cached.scanResponse);
+          setIsCached(true);
+          setCacheStatus(domainState.cacheStatus || getCacheStatus(domainState.cached));
+          setState("RESULT");
+        } else if (domainState.state === "SCANNING") {
+          setState("SCANNING");
+        } else if (domainState.state === "UNSUPPORTED") {
+          setState("UNSUPPORTED");
+        } else {
+          setState("IDLE");
+        }
+
         loadHistory();
-        return;
-      }
-
-      console.log("[TRUSTINEL] Popup opened for:", extractHostname(url));
-
-      const domainState = await requestDomainState(url);
-
-      if (domainState.state === "COMPLETED" && domainState.cached) {
-        console.log("[TRUSTINEL] Loaded cached result for:", domainState.domain);
-        setScanResult(domainState.cached.scanResponse);
-        setIsCached(true);
-        setCacheStatus(domainState.cacheStatus || getCacheStatus(domainState.cached));
-        setState("RESULT");
-      } else if (domainState.state === "SCANNING") {
-        setState("SCANNING");
-      } else if (domainState.state === "UNSUPPORTED") {
-        setState("UNSUPPORTED");
-      } else {
-        setState("IDLE");
-      }
-
+      });
+    } catch {
+      setState("UNSUPPORTED");
       loadHistory();
-    });
+    }
   }, [loadHistory]);
 
   const handleScan = useCallback(() => {
