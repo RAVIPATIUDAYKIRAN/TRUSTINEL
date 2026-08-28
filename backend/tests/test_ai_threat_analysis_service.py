@@ -258,7 +258,7 @@ async def test_7_ai_grounded_rules_in_system_prompt():
     provider = OpenAIThreatProvider()
     prompt = provider.SYSTEM_PROMPT
 
-    assert "Reason ONLY from the evidence" in prompt
+    assert "Reason ONLY from the supplied evidence" in prompt
     assert "Do NOT invent facts" in prompt
     assert "Do NOT calculate a new trust score" in prompt
 
