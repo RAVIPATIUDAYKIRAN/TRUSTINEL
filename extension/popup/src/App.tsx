@@ -17,6 +17,7 @@ import {
   type ClearHistoryResponse,
 } from "../../lib/types";
 import TrustScore from "./components/TrustScore";
+import SecurityDetails from "./components/SecurityDetails";
 
 type AppState = "IDLE" | "SCANNING" | "RESULT" | "ERROR" | "UNSUPPORTED";
 
@@ -426,6 +427,9 @@ function App() {
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Summary</span>
               <p className="mt-1 text-xs text-slate-300 leading-relaxed">{scanResult.trust_report.summary}</p>
             </div>
+
+            {/* Security Details Context */}
+            <SecurityDetails report={scanResult.trust_report} />
 
             {/* Explanation */}
             {scanResult.trust_report.explanation && (
