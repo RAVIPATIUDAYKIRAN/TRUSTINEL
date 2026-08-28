@@ -24,5 +24,11 @@ class Settings(BaseSettings):
     AI_EXPLANATION_MODEL: str = ""
     AI_EXPLANATION_API_KEY: Optional[str] = None
 
+    # AI Threat Analysis Configuration
+    AI_THREAT_ANALYSIS_ENABLED: bool = False
+    AI_THREAT_ANALYSIS_PROVIDER: str = "openai"
+    AI_THREAT_ANALYSIS_MODEL: str = ""
+    AI_THREAT_ANALYSIS_API_KEY: Optional[str] = None
+
 
 settings = Settings()

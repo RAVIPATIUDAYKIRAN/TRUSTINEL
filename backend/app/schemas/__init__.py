@@ -8,6 +8,7 @@ from app.schemas.header_analysis import HeaderAnalysisResult
 from app.schemas.redirect_analysis import RedirectAnalysisResult
 from app.schemas.trust_evaluation import TrustEvaluationResult
 from app.schemas.risk_explanation import RiskExplanationResult
+from app.schemas.ai_threat_analysis import AIThreatAnalysisResult
 
 __all__ = [
     "ErrorResponse",
@@ -20,7 +21,8 @@ __all__ = [
     "HeaderAnalysisResult",
     "RedirectAnalysisResult",
     "TrustEvaluationResult",
-    "RiskExplanationResult"
+    "RiskExplanationResult",
+    "AIThreatAnalysisResult",
 ]
 
 
