@@ -11,6 +11,35 @@ jobs:
     name: Backend Lint, Compilation & Pytest Suite
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trustinel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/trustinel
+      REDIS_URL: redis://localhost:6379/0
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,6 +58,11 @@ jobs:
       - name: Python Compilation Check
         run: |
           python -m compileall backend/app
+
+      - name: Run Database Migrations
+        run: |
+          cd backend
+          PYTHONPATH=. alembic upgrade head
 
       - name: Run Backend Pytest Suite
         run: |
