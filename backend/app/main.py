@@ -12,10 +12,12 @@ from sqlalchemy import text
 from app.config.settings import settings
 from app.core.logging import setup_logging
 from app.database.session import engine, redis_client, close_connections
+from sqlalchemy.exc import SQLAlchemyError
 from app.middleware.exceptions import (
     APIException,
     api_exception_handler,
     validation_exception_handler,
+    sqlalchemy_exception_handler,
     global_exception_handler,
     RequestIDMiddleware
 )
@@ -66,6 +68,7 @@ app = FastAPI(
 # Exception handlers registration
 app.add_exception_handler(APIException, api_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(SQLAlchemyError, sqlalchemy_exception_handler)
 app.add_exception_handler(Exception, global_exception_handler)
 
 # Middlewares setup
@@ -101,7 +104,7 @@ async def health_check(response: Response):
         db_latency = round((time.perf_counter() - start_time) * 1000, 2)
     except Exception as e:
         logger.error(f"Health Check: Database connection failed: {e}")
-        db_status = f"error: {str(e)}"
+        db_status = "error: connection failed"
         overall_status = "unhealthy"
 
     # Ping Redis
@@ -111,7 +114,7 @@ async def health_check(response: Response):
         redis_latency = round((time.perf_counter() - start_time) * 1000, 2)
     except Exception as e:
         logger.error(f"Health Check: Redis connection failed: {e}")
-        redis_status = f"error: {str(e)}"
+        redis_status = "error: connection failed"
         overall_status = "unhealthy"
 
     if overall_status == "unhealthy":

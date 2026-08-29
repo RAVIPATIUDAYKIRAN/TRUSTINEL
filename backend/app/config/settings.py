@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.1.0"
     ENVIRONMENT: str = "development"
     LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "text"
 
     # Database Connection
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/trustinel"
@@ -67,6 +68,7 @@ class Settings(BaseSettings):
             "environment": self.ENVIRONMENT,
             "is_production": self.is_production,
             "log_level": self.LOG_LEVEL,
+            "log_format": self.LOG_FORMAT,
             "enable_docs": self.ENABLE_DOCS,
             "cors_origins": self.CORS_ORIGINS,
             "cors_origin_regex": self.CORS_ORIGIN_REGEX,

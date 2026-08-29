@@ -46,11 +46,57 @@ export interface ScanResponse {
 export class ApiError extends Error {
   constructor(
     message: string,
-    public statusCode?: number
+    public statusCode?: number,
+    public errorCode?: string,
+    public retryAfterSeconds?: number
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+async function handleResponseError(response: Response): Promise<never> {
+  let detail = `Server returned status ${response.status}`;
+  let errorCode: string | undefined;
+  let retryAfterSeconds: number | undefined;
+
+  // Extract Retry-After header if present
+  const retryHeader = response.headers.get("Retry-After");
+  if (retryHeader) {
+    const parsed = parseInt(retryHeader, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      retryAfterSeconds = parsed;
+    }
+  }
+
+  try {
+    const body = await response.json();
+    if (body.detail) {
+      detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+    }
+    if (body.error_code) {
+      errorCode = String(body.error_code);
+    }
+    if (body.retry_after_seconds && typeof body.retry_after_seconds === "number") {
+      retryAfterSeconds = body.retry_after_seconds;
+    }
+  } catch {
+    /* Ignore JSON parse errors */
+  }
+
+  // Friendly error messages based on status codes
+  if (response.status === 400 && errorCode === "INVALID_URL") {
+    detail = detail || "Invalid website URL format provided.";
+  } else if (response.status === 403 && errorCode === "URL_NOT_ALLOWED") {
+    detail = detail || "Scanning restricted host or internal network destination is not allowed.";
+  } else if (response.status === 429) {
+    const secondsText = retryAfterSeconds ? ` Please try again in ${retryAfterSeconds} seconds.` : "";
+    detail = `Rate limit exceeded.${secondsText}`;
+  } else if (response.status === 503) {
+    detail = "TRUSTINEL backend services are currently undergoing maintenance. Please try again shortly.";
+  }
+
+  throw new ApiError(detail, response.status, errorCode, retryAfterSeconds);
 }
 
 export async function scanWebsite(url: string): Promise<ScanResponse> {
@@ -74,18 +120,13 @@ export async function scanWebsite(url: string): Promise<ScanResponse> {
   clearTimeout(timeoutId);
 
   if (!response.ok) {
-    let detail = `Server returned ${response.status}`;
-    try {
-      const body = await response.json();
-      if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-    } catch { /* ignore parse errors */ }
-    throw new ApiError(detail, response.status);
+    await handleResponseError(response);
   }
 
   try {
     return (await response.json()) as ScanResponse;
   } catch {
-    throw new ApiError("Received an invalid response from the server.");
+    throw new ApiError("Received an invalid response format from the server.");
   }
 }
 
@@ -107,17 +148,12 @@ export async function getScan(scanId: string): Promise<ScanResponse> {
   clearTimeout(timeoutId);
 
   if (!response.ok) {
-    let detail = `Server returned ${response.status}`;
-    try {
-      const body = await response.json();
-      if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-    } catch { /* ignore parse errors */ }
-    throw new ApiError(detail, response.status);
+    await handleResponseError(response);
   }
 
   try {
     return (await response.json()) as ScanResponse;
   } catch {
-    throw new ApiError("Received an invalid response from the server.");
+    throw new ApiError("Received an invalid response format from the server.");
   }
 }

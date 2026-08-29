@@ -4,6 +4,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger("trustinel.exceptions")
 
@@ -38,6 +39,24 @@ class RedisException(APIException):
             detail=detail,
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             error_code="REDIS_ERROR"
+        )
+
+
+class InvalidURLException(APIException):
+    def __init__(self, detail: str = "Invalid or malformed URL."):
+        super().__init__(
+            detail=detail,
+            status_code=status.HTTP_400_BAD_REQUEST,
+            error_code="INVALID_URL"
+        )
+
+
+class SSRFBlockedException(APIException):
+    def __init__(self, detail: str = "The requested URL is not allowed."):
+        super().__init__(
+            detail=detail,
+            status_code=status.HTTP_403_FORBIDDEN,
+            error_code="URL_NOT_ALLOWED"
         )
 
 
@@ -90,6 +109,18 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+async def sqlalchemy_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error(f"SQLAlchemy Database Exception on request {request.url.path}: {exc}")
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "detail": "Database service temporarily unavailable.",
+            "error_code": "DATABASE_ERROR",
+            "status_code": status.HTTP_503_SERVICE_UNAVAILABLE
+        }
+    )
+
+
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception(f"Unhandled exception handling request {request.url.path}: {str(exc)}")
     return JSONResponse(
@@ -102,10 +133,57 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     )
 
 
+import time
+from app.core.logging import sanitize_correlation_id, set_correlation_id, get_correlation_id
+
+
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Add basic logging of requests
-        logger.info(f"Request: {request.method} {request.url.path}")
-        response = await call_next(request)
-        logger.info(f"Response status: {response.status_code}")
-        return response
+        incoming_id = request.headers.get("X-Request-ID")
+        correlation_id = sanitize_correlation_id(incoming_id)
+        set_correlation_id(correlation_id)
+
+        start_time = time.perf_counter()
+        logger.info(
+            f"Request started: {request.method} {request.url.path}",
+            extra={"event": "request_started", "method": request.method, "path": request.url.path}
+        )
+
+        try:
+            response = await call_next(request)
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            logger.info(
+                f"Request completed: {request.method} {request.url.path} -> {response.status_code} ({duration_ms}ms)",
+                extra={
+                    "event": "request_completed",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "duration_ms": duration_ms
+                }
+            )
+            response.headers["X-Request-ID"] = correlation_id
+            return response
+        except Exception as exc:
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            logger.error(
+                f"Unhandled request exception: {request.method} {request.url.path}: {exc}",
+                extra={
+                    "event": "unhandled_exception",
+                    "method": request.method,
+                    "path": request.url.path,
+                    "duration_ms": duration_ms,
+                    "exception_class": exc.__class__.__name__
+                }
+            )
+            if isinstance(exc, APIException):
+                response = await api_exception_handler(request, exc)
+            elif isinstance(exc, RequestValidationError):
+                response = await validation_exception_handler(request, exc)
+            elif isinstance(exc, SQLAlchemyError):
+                response = await sqlalchemy_exception_handler(request, exc)
+            else:
+                response = await global_exception_handler(request, exc)
+
+            response.headers["X-Request-ID"] = correlation_id
+            return response

@@ -114,7 +114,12 @@ class RateLimiter:
             }
             logger.warning(
                 f"[TRUSTINEL] Rate limit exceeded for IP '{client_ip}' on '{self.tag}'. "
-                f"Count: {count}/{max_limit}. Retry after: {retry_after}s."
+                f"Count: {count}/{max_limit}. Retry after: {retry_after}s.",
+                extra={
+                    "event": "rate_limit_exceeded",
+                    "tag": self.tag,
+                    "client_ip": client_ip
+                }
             )
             raise RateLimitException(
                 detail=f"Rate limit exceeded for endpoint '{self.tag}'. Please try again in {retry_after} seconds.",

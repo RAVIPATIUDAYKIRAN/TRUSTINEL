@@ -17,6 +17,7 @@ from app.analyzers.redirect_analyzer import RedirectAnalyzer
 from app.services.rule_based_trust_engine import RuleBasedTrustEngine
 from app.services.risk_explanation_service import RiskExplanationService
 from app.services.ai_threat_analysis_service import AIThreatAnalysisService
+from app.core.url_security import URLSecurityValidator
 
 logger = logging.getLogger("trustinel.services.scan_service")
 
@@ -62,14 +63,19 @@ class ScanService:
         an explanation, running AI threat analysis, persisting results,
         and completing the scan.
         """
-        # 1. Normalize the URL
-        normalized_url = url.strip()
+        # 1. Normalize the URL and validate syntax FIRST (zero DB records created for invalid URLs)
+        normalized_url = URLSecurityValidator.validate_url_syntax(url)
 
-        # 2. Extract the domain
+        # 2. Extract and validate domain / DNS SSRF security BEFORE database transaction
         parsed_url = urlparse(normalized_url)
         domain = parsed_url.netloc if parsed_url.netloc else parsed_url.path
         if not domain:
             domain = normalized_url
+        await URLSecurityValidator.validate_hostname_resolution(domain)
+
+        logger.info(f"Scan started for domain: {domain}", extra={"event": "scan_started", "domain": domain})
+
+        scan: Optional[WebsiteScan] = None
 
         try:
             # 3. Create a WebsiteScan record with status=PENDING
@@ -87,7 +93,17 @@ class ScanService:
             )
 
             # 5. Fetch the website
+            logger.info(f"Scan fetch started for domain: {domain}", extra={"event": "scan_fetch_started", "domain": domain})
             fetch_result = await self.fetcher.fetch(normalized_url)
+            logger.info(
+                f"Scan fetch completed for domain: {domain}",
+                extra={
+                    "event": "scan_fetch_completed",
+                    "domain": domain,
+                    "status_code": fetch_result.status_code,
+                    "duration_ms": fetch_result.response_time_ms
+                }
+            )
 
             # 6. Run all analyzers independently — structured errors, never crash
             ssl_result = await self.ssl_analyzer.analyze(fetch_result)
@@ -167,11 +183,40 @@ class ScanService:
             if refreshed_scan and refreshed_scan.trust_report:
                 object.__setattr__(refreshed_scan.trust_report, "ai_threat_analysis", ai_threat)
 
+            logger.info(
+                f"Scan completed for domain: {domain}",
+                extra={
+                    "event": "scan_completed",
+                    "scan_id": str(scan.id),
+                    "domain": domain,
+                    "trust_score": trust_evaluation.trust_score,
+                    "risk_level": trust_evaluation.risk_level,
+                    "ai_enabled": ai_threat.enabled
+                }
+            )
+
             return refreshed_scan
 
-        except Exception:
-            # Rollback transaction on unexpected failures and propagate the error
+        except Exception as exc:
+            logger.error(
+                f"Scan failed for domain: {domain}",
+                extra={
+                    "event": "scan_failed",
+                    "scan_id": str(scan.id) if scan else None,
+                    "domain": domain,
+                    "error_class": exc.__class__.__name__
+                }
+            )
+            # Rollback transaction on unexpected failures
             await self.session.rollback()
+            # Attempt to record FAILED status for scan if record was created
+            if scan is not None and hasattr(scan, "id"):
+                try:
+                    await self.scan_repo.update_scan_status(scan.id, ScanStatus.FAILED)
+                    await self.session.commit()
+                except Exception as status_exc:
+                    logger.warning(f"[TRUSTINEL] Could not persist FAILED status for scan {scan.id}: {status_exc}")
+                    await self.session.rollback()
             raise
 
     async def get_scan(self, scan_id: uuid.UUID) -> Optional[WebsiteScan]:

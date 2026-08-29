@@ -1,11 +1,35 @@
 import logging
 import time
+import urllib.parse
 from typing import Optional
 import httpx
 
 from app.schemas.website_fetch import WebsiteFetchResult
+from app.core.url_security import URLSecurityValidator
+from app.middleware.exceptions import InvalidURLException, SSRFBlockedException
 
 logger = logging.getLogger("trustinel.services.website_fetcher")
+
+
+async def _validate_redirect_security(response: httpx.Response) -> None:
+    """
+    HTTPX event hook that validates target URLs during redirect chains before following.
+    Aborts redirect if target resolves to restricted/private IP or invalid scheme.
+    """
+    if response.is_redirect and "location" in response.headers:
+        redirect_target = response.headers["location"]
+        try:
+            absolute_target = str(response.url.join(redirect_target))
+            validated_url = URLSecurityValidator.validate_url_syntax(absolute_target)
+            parsed_target = urllib.parse.urlparse(validated_url)
+            if parsed_target.hostname:
+                await URLSecurityValidator.validate_hostname_resolution(parsed_target.hostname)
+        except (InvalidURLException, SSRFBlockedException) as exc:
+            logger.warning(f"[TRUSTINEL] Redirect SSRF blocked to target '{redirect_target}': {exc}")
+            raise httpx.RequestError(
+                f"Redirect SSRF blocked to restricted destination.",
+                request=response.request
+            )
 
 
 class WebsiteFetcher:
@@ -21,7 +45,6 @@ class WebsiteFetcher:
         Fetches web page content asynchronously, recording redirect steps,
         timing metrics, and capturing response headers/errors cleanly.
         """
-        # Configure custom User-Agent to emulate standard secure browser requests
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -36,7 +59,8 @@ class WebsiteFetcher:
             async with httpx.AsyncClient(
                 timeout=self.timeout_seconds,
                 follow_redirects=True,
-                headers=headers
+                headers=headers,
+                event_hooks={"response": [_validate_redirect_security]}
             ) as client:
                 response = await client.get(url)
                 elapsed = round((time.perf_counter() - start_time) * 1000, 2)
@@ -85,7 +109,6 @@ class WebsiteFetcher:
             )
 
         except httpx.RequestError as e:
-            # Catches other request errors (SSL errors, dns resolution failures, protocol errors, etc.)
             elapsed = round((time.perf_counter() - start_time) * 1000, 2)
             logger.warning(f"Request error fetching URL '{url}': {e}")
             return WebsiteFetchResult(
@@ -102,4 +125,3 @@ class WebsiteFetcher:
                 response_time_ms=elapsed,
                 error=f"Unexpected error: {str(e)}"
             )
-

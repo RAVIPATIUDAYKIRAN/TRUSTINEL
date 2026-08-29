@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 from app.models.enums import ScanStatus
 from app.schemas.trust_report import TrustReportResponse
+from app.core.url_security import URLSecurityValidator
 
 
 class ScanCreateRequest(BaseModel):
@@ -11,6 +12,13 @@ class ScanCreateRequest(BaseModel):
     Schema for initiating a new website trust scan.
     """
     url: HttpUrl = Field(..., description="The full website URL to scan (must start with http:// or https://).")
+
+    @field_validator("url", mode="before")
+    @classmethod
+    def validate_url_security(cls, v: str) -> str:
+        if isinstance(v, HttpUrl):
+            v = str(v)
+        return URLSecurityValidator.validate_url_syntax(v)
 
     model_config = {
         "json_schema_extra": {

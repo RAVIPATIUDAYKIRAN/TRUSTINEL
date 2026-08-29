@@ -24,7 +24,7 @@ import AIThreatAnalysis from "./components/AIThreatAnalysis";
 type AppState = "IDLE" | "SCANNING" | "RESULT" | "ERROR" | "UNSUPPORTED";
 
 // ---------------------------------------------------------------------------
-// Risk level colors (reused across components)
+// Risk level colors
 // ---------------------------------------------------------------------------
 
 const riskColors = {
@@ -164,6 +164,8 @@ function App() {
   const [hostname, setHostname] = useState<string>("");
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [apiStatusCode, setApiStatusCode] = useState<number | undefined>();
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | undefined>();
   const [isCached, setIsCached] = useState(false);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus>("MISSING");
 
@@ -224,6 +226,8 @@ function App() {
     setState("SCANNING");
     setScanResult(null);
     setErrorMessage("");
+    setApiStatusCode(undefined);
+    setRetryAfterSeconds(undefined);
     setIsCached(false);
     setCacheStatus("MISSING");
     setViewingHistoryDomain(null);
@@ -237,16 +241,16 @@ function App() {
         setState("RESULT");
         setIsCached(false);
         setCacheStatus("FRESH");
-        // Refresh history after scan completes
         loadHistory();
       })
       .catch((err) => {
-        const msg =
-          err instanceof ApiError
-            ? err.message
-            : "An unexpected error occurred during the scan.";
+        const msg = err instanceof ApiError ? err.message : "An unexpected error occurred during the scan.";
         console.error("[TRUSTINEL] Scan error:", msg);
         setErrorMessage(msg);
+        if (err instanceof ApiError) {
+          setApiStatusCode(err.statusCode);
+          setRetryAfterSeconds(err.retryAfterSeconds);
+        }
         setState("ERROR");
       });
   }, [tabUrl, loadHistory]);
@@ -262,7 +266,6 @@ function App() {
       setCacheStatus(getCacheStatus(cached));
       setState("RESULT");
     } else {
-      // Cached result was cleared but history entry remains — show minimal info
       setErrorMessage("Detailed result for this domain is no longer available. Scan again to refresh.");
       setState("ERROR");
     }
@@ -285,7 +288,6 @@ function App() {
     if (!tabUrl || isUnsupportedUrl(tabUrl)) {
       setState("UNSUPPORTED");
     } else {
-      // Re-check for cached result of current tab
       requestDomainState(tabUrl).then((ds) => {
         if (ds.state === "COMPLETED" && ds.cached) {
           setScanResult(ds.cached.scanResponse);
@@ -298,7 +300,6 @@ function App() {
     }
   }, [tabUrl]);
 
-  // Determine which domain label to show
   const displayDomain = viewingHistoryDomain || (hostname ? hostname : "");
 
   return (
@@ -503,13 +504,52 @@ function App() {
         {/* --- ERROR State --- */}
         {state === "ERROR" && (
           <div className="flex-1 flex flex-col justify-center items-center px-6 py-8 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mb-5">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <h2 className="text-lg font-black text-slate-100">Analysis Failed</h2>
-            <p className="mt-2 text-xs text-slate-400 max-w-[260px]">{errorMessage}</p>
+            {/* Dynamic Error Header / Card */}
+            {apiStatusCode === 429 ? (
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-5">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            ) : apiStatusCode === 403 ? (
+              <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mb-5">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+            ) : apiStatusCode === 503 ? (
+              <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mb-5">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mb-5">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+            )}
+
+            <h2 className="text-lg font-black text-slate-100">
+              {apiStatusCode === 429
+                ? "Rate Limit Exceeded"
+                : apiStatusCode === 403
+                ? "Restricted Destination"
+                : apiStatusCode === 503
+                ? "Service Maintenance"
+                : "Analysis Failed"}
+            </h2>
+
+            <p className="mt-2 text-xs text-slate-400 max-w-[260px] leading-relaxed">{errorMessage}</p>
+
+            {retryAfterSeconds && (
+              <div className="mt-3 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] font-semibold text-amber-400">
+                Retry available in ~{retryAfterSeconds}s
+              </div>
+            )}
+
             <button
               onClick={handleScan}
               className="mt-6 w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-sm font-bold uppercase tracking-widest shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:brightness-110 transition-all duration-200 active:scale-[0.98]"
@@ -539,7 +579,6 @@ function App() {
         {/* ================================================================= */}
         {state !== "SCANNING" && (
           <div className="px-5 pt-4 pb-5 border-t border-slate-800/50">
-            {/* Section header */}
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                 Recent Scans
@@ -554,7 +593,6 @@ function App() {
               )}
             </div>
 
-            {/* Clear confirmation */}
             {showClearConfirm && (
               <div className="mb-3 p-2.5 rounded-lg bg-red-500/8 border border-red-500/20 flex items-center justify-between">
                 <span className="text-[11px] text-slate-300">Clear all history?</span>
@@ -575,7 +613,6 @@ function App() {
               </div>
             )}
 
-            {/* History list */}
             {history.length === 0 ? (
               <div className="py-4 text-center">
                 <p className="text-xs text-slate-600">No recent scans yet.</p>
@@ -592,7 +629,6 @@ function App() {
                         : "bg-slate-900/40 border-slate-800/50 hover:bg-slate-800/60 hover:border-slate-700/60"
                     }`}
                   >
-                    {/* Score circle */}
                     <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                       entry.riskLevel === "LOW" ? "bg-emerald-500/15" :
                       entry.riskLevel === "MEDIUM" ? "bg-amber-500/15" :
@@ -603,7 +639,6 @@ function App() {
                       </span>
                     </div>
 
-                    {/* Domain + summary */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-slate-200 truncate">
@@ -618,7 +653,6 @@ function App() {
                       </p>
                     </div>
 
-                    {/* Timestamp */}
                     <span className="text-[9px] text-slate-600 shrink-0 group-hover:text-slate-500 transition-colors">
                       {timeAgo(entry.scannedAt)}
                     </span>

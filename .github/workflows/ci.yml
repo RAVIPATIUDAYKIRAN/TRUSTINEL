@@ -1,4 +1,4 @@
-name: TRUSTINEL CI
+name: TRUSTINEL Continuous Integration & Security Audit
 
 on:
   push:
@@ -7,36 +7,72 @@ on:
     branches: [ main, master, dev ]
 
 jobs:
-  backend-lint:
+  backend-ci:
+    name: Backend Lint, Compilation & Pytest Suite
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Set up Python
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-
-      - name: Lint placeholder
+      - name: Install backend dependencies
         run: |
-          echo "Lint check skeleton running..."
-          # Future task: uv run black --check app/
-          # Future task: uv run isort --check app/
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn pydantic pydantic-settings sqlalchemy asyncpg redis alembic httpx python-whois pytest pytest-asyncio
 
-  extension-build:
+      - name: Python Compilation Check
+        run: |
+          python -m compileall backend/app
+
+      - name: Run Backend Pytest Suite
+        run: |
+          cd backend
+          PYTHONPATH=. pytest tests/ -v
+
+  extension-ci:
+    name: Chrome Extension Build & Type Check
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: "npm"
+          cache-dependency-path: extension/package-lock.json
 
-      - name: Build placeholder
+      - name: Install extension dependencies
         run: |
-          echo "Extension build skeleton running..."
-          # Future task: npm install && npm run build
+          cd extension
+          npm ci || npm install
+
+      - name: Build Chrome Extension Artifacts
+        run: |
+          cd extension
+          npm run build
+
+  security-audit:
+    name: Automated Secret Scanning & Configuration Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Secret Scanning Audit
+        run: |
+          echo "Scanning codebase for unmasked secrets and credentials..."
+          # Verify no committed raw OpenAI API keys (sk-...)
+          ! grep -rnE "sk-[a-zA-Z0-9]{32,}" backend/app/ extension/lib/ || (echo "ERROR: Unmasked OpenAI API key pattern found!" && exit 1)
+          # Verify no committed private keys
+          ! grep -rnE "-----BEGIN PRIVATE KEY-----" . || (echo "ERROR: Private key detected in repository!" && exit 1)
+          echo "Secret scanning completed with zero hardcoded credentials detected."

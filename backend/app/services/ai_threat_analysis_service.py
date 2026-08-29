@@ -226,20 +226,43 @@ class AIThreatAnalysisService:
 
         cache_key = self._generate_cache_key(domain, evidence)
         ttl = getattr(settings, "AI_THREAT_ANALYSIS_CACHE_TTL_SECONDS", 600)
+        provider_name = (settings.AI_THREAT_ANALYSIS_PROVIDER or "").lower()
 
         # Check Cache BEFORE external AI provider execution
         cached_result = await self._get_from_cache(cache_key)
         if cached_result is not None:
-            logger.info(f"[TRUSTINEL] AI Threat Analysis cache hit for domain '{domain}' ({cache_key}).")
+            logger.info(
+                f"[TRUSTINEL] AI Threat Analysis cache hit for domain '{domain}'.",
+                extra={
+                    "event": "ai_threat_analysis_cache_hit",
+                    "domain": domain,
+                    "provider": provider_name,
+                    "cache_hit": True
+                }
+            )
             return cached_result
 
+        logger.info(
+            f"[TRUSTINEL] AI Threat Analysis cache miss for domain '{domain}'.",
+            extra={
+                "event": "ai_threat_analysis_cache_miss",
+                "domain": domain,
+                "provider": provider_name,
+                "cache_hit": False
+            }
+        )
+
         # Cache miss — validate provider
-        provider_name = (settings.AI_THREAT_ANALYSIS_PROVIDER or "").lower()
         provider = self._providers.get(provider_name)
         if provider is None:
             logger.warning(
                 f"[TRUSTINEL] Unsupported AI threat provider '{settings.AI_THREAT_ANALYSIS_PROVIDER}'. "
-                "Returning deterministic fallback."
+                "Returning deterministic fallback.",
+                extra={
+                    "event": "ai_threat_analysis_failed",
+                    "provider": provider_name,
+                    "reason": "unsupported_provider"
+                }
             )
             return self._get_fallback(trust_evaluation)
 
@@ -251,6 +274,14 @@ class AIThreatAnalysisService:
         )
 
         try:
+            logger.info(
+                "AI threat analysis started",
+                extra={
+                    "event": "ai_threat_analysis_started",
+                    "provider": provider_name,
+                    "model": settings.AI_THREAT_ANALYSIS_MODEL
+                }
+            )
             result = await provider.analyze_threat(
                 model=settings.AI_THREAT_ANALYSIS_MODEL,
                 api_key=api_key_str,
@@ -259,11 +290,28 @@ class AIThreatAnalysisService:
             )
             # Store successful result in cache
             await self._store_in_cache(cache_key, result, ttl)
+
+            logger.info(
+                "AI threat analysis completed",
+                extra={
+                    "event": "ai_threat_analysis_completed",
+                    "provider": provider_name,
+                    "model": settings.AI_THREAT_ANALYSIS_MODEL,
+                    "threat_level": result.threat_level,
+                    "confidence": result.confidence,
+                    "cache_hit": False
+                }
+            )
             return result
         except Exception as exc:
             logger.warning(
-                f"[TRUSTINEL] AI threat analysis provider '{provider_name}' failed: {exc}. "
-                "Returning deterministic fallback without caching."
+                f"[TRUSTINEL] AI threat analysis provider failed: {exc}. Returning fallback.",
+                extra={
+                    "event": "ai_threat_analysis_failed",
+                    "provider": provider_name,
+                    "model": settings.AI_THREAT_ANALYSIS_MODEL,
+                    "error_class": exc.__class__.__name__
+                }
             )
             return self._get_fallback(trust_evaluation)
 
