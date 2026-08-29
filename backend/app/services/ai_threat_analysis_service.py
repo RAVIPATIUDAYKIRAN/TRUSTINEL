@@ -244,11 +244,16 @@ class AIThreatAnalysisService:
             return self._get_fallback(trust_evaluation)
 
         timeout = self._get_validated_timeout()
+        api_key_str = (
+            settings.AI_THREAT_ANALYSIS_API_KEY.get_secret_value()
+            if hasattr(settings.AI_THREAT_ANALYSIS_API_KEY, "get_secret_value")
+            else str(settings.AI_THREAT_ANALYSIS_API_KEY or "")
+        )
 
         try:
             result = await provider.analyze_threat(
                 model=settings.AI_THREAT_ANALYSIS_MODEL,
-                api_key=settings.AI_THREAT_ANALYSIS_API_KEY,
+                api_key=api_key_str,
                 evidence=evidence,
                 timeout=timeout,
             )

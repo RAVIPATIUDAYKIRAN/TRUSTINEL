@@ -167,9 +167,14 @@ class RiskExplanationService:
                     )
                     return self._get_fallback_explanation(trust_evaluation)
 
+                api_key_str = (
+                    settings.AI_EXPLANATION_API_KEY.get_secret_value()
+                    if hasattr(settings.AI_EXPLANATION_API_KEY, "get_secret_value")
+                    else str(settings.AI_EXPLANATION_API_KEY or "")
+                )
                 return await provider.generate_explanation(
                     model=settings.AI_EXPLANATION_MODEL,
-                    api_key=settings.AI_EXPLANATION_API_KEY,
+                    api_key=api_key_str,
                     evidence=evidence,
                 )
             except Exception as exc:

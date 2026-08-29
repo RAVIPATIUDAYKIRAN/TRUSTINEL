@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, status, HTTPException
 import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.settings import settings
 from app.core.deps import get_db
+from app.core.rate_limiter import RateLimiter
 from app.schemas.scan import ScanCreateRequest, ScanResponse
 from app.schemas.ai_threat_analysis import AIServiceStatusResponse
 from app.repositories.website_scan_repository import WebsiteScanRepository
@@ -20,11 +22,17 @@ from app.services.scan_service import ScanService
 
 router = APIRouter(prefix="/api/v1", tags=["Scan"])
 
+# Rate limiters
+rate_limit_post_scan = RateLimiter(tag="post_scan", get_limit=lambda: settings.RATE_LIMIT_POST_SCAN)
+rate_limit_get_scan = RateLimiter(tag="get_scan", get_limit=lambda: settings.RATE_LIMIT_GET_SCAN)
+rate_limit_ai_status = RateLimiter(tag="ai_status", get_limit=lambda: settings.RATE_LIMIT_AI_STATUS)
+
 
 @router.get(
     "/scan/ai-status",
     response_model=AIServiceStatusResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit_ai_status)],
     summary="Retrieve AI Threat Analysis service status and security audit telemetry",
     description=(
         "Returns non-sensitive operational health, diagnostic configuration, cache metrics, "
@@ -45,6 +53,7 @@ async def get_ai_status() -> AIServiceStatusResponse:
     "/scan",
     response_model=ScanResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_post_scan)],
     summary="Initiate website trust scan",
     description="Initiates a new website scan, runs real security analyzers, and generates a trust report."
 )
@@ -94,6 +103,7 @@ async def create_scan(
     "/scan/{scan_id}",
     response_model=ScanResponse,
     status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit_get_scan)],
     summary="Retrieve scan details",
     description="Retrieves the details and generated trust report of a scan by its unique scan ID."
 )

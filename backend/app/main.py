@@ -59,8 +59,8 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="TRUSTINEL Project Foundation API",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if settings.ENABLE_DOCS else None,
+    redoc_url="/redoc" if settings.ENABLE_DOCS else None
 )
 
 # Exception handlers registration
@@ -72,7 +72,8 @@ app.add_exception_handler(Exception, global_exception_handler)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Broad CORS for dev; restrict in production
+    allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]

@@ -1,4 +1,5 @@
 import logging
+from typing import Dict, Optional
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -12,11 +13,13 @@ class APIException(Exception):
         self,
         detail: str,
         status_code: int = status.HTTP_400_BAD_REQUEST,
-        error_code: str = "BAD_REQUEST"
+        error_code: str = "BAD_REQUEST",
+        headers: Optional[Dict[str, str]] = None
     ):
         self.detail = detail
         self.status_code = status_code
         self.error_code = error_code
+        self.headers = headers or {}
         super().__init__(detail)
 
 
@@ -38,15 +41,39 @@ class RedisException(APIException):
         )
 
 
+class RateLimitException(APIException):
+    def __init__(
+        self,
+        detail: str = "Rate limit exceeded. Please try again later.",
+        retry_after_seconds: int = 60,
+        headers: Optional[Dict[str, str]] = None
+    ):
+        self.retry_after_seconds = retry_after_seconds
+        merged_headers = {"Retry-After": str(retry_after_seconds)}
+        if headers:
+            merged_headers.update(headers)
+        super().__init__(
+            detail=detail,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            error_code="RATE_LIMIT_EXCEEDED",
+            headers=merged_headers
+        )
+
+
 async def api_exception_handler(request: Request, exc: APIException) -> JSONResponse:
     logger.error(f"API Error handling request {request.url.path}: {exc.detail}")
+    content = {
+        "detail": exc.detail,
+        "error_code": exc.error_code,
+        "status_code": exc.status_code
+    }
+    if isinstance(exc, RateLimitException):
+        content["retry_after_seconds"] = exc.retry_after_seconds
+
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "detail": exc.detail,
-            "error_code": exc.error_code,
-            "status_code": exc.status_code
-        }
+        content=content,
+        headers=exc.headers if exc.headers else None
     )
 
 
