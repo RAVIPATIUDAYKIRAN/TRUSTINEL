@@ -86,6 +86,20 @@ class WebsiteScanRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def list_scans_by_domain(self, domain: str, limit: int = 100) -> Sequence[WebsiteScan]:
+        """
+        List scans associated with a specific domain, ordered descending by creation date.
+        """
+        stmt = (
+            select(WebsiteScan)
+            .where(WebsiteScan.domain == domain)
+            .order_by(desc(WebsiteScan.created_at))
+            .limit(limit)
+            .options(selectinload(WebsiteScan.trust_report))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def delete_scan(self, scan_id: uuid.UUID) -> bool:
         """
         Delete a WebsiteScan record by its UUID. Returns True if deleted, False otherwise.

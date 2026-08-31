@@ -482,6 +482,7 @@ def test_error_response_schema_contract():
     assert d2["status_code"] == 403
 
     # NOT FOUND
-    r3 = client.get(f"/api/v1/scan/{uuid.uuid4()}")
-    assert r3.status_code == 404
-    assert "not found" in r3.json()["detail"].lower()
+    with patch("app.repositories.website_scan_repository.WebsiteScanRepository.get_scan_by_id", return_value=None):
+        r3 = client.get(f"/api/v1/scan/{uuid.uuid4()}")
+        assert r3.status_code == 404
+        assert "not found" in r3.json()["detail"].lower()

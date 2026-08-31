@@ -20,6 +20,7 @@ import TrustScore from "./components/TrustScore";
 import SecurityDetails from "./components/SecurityDetails";
 import RiskWarning from "./components/RiskWarning";
 import AIThreatAnalysis from "./components/AIThreatAnalysis";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
 
 type AppState = "IDLE" | "SCANNING" | "RESULT" | "ERROR" | "UNSUPPORTED";
 
@@ -168,6 +169,7 @@ function App() {
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | undefined>();
   const [isCached, setIsCached] = useState(false);
   const [cacheStatus, setCacheStatus] = useState<CacheStatus>("MISSING");
+  const [activeTab, setActiveTab] = useState<"report" | "analytics">("report");
 
   // History state
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
@@ -328,7 +330,7 @@ function App() {
 
       {/* Main Body */}
       <main className="flex-1 flex flex-col z-10 overflow-y-auto">
-        {/* Current Site Bar */}
+        {/* Current Site Bar & View Tabs */}
         {displayDomain && state !== "UNSUPPORTED" && (
           <div className="px-5 py-3 border-b border-slate-800/50 bg-slate-900/30">
             <div className="flex items-center justify-between">
@@ -347,11 +349,40 @@ function App() {
                 </button>
               )}
             </div>
+
+            {/* View Selector Tabs */}
+            <div className="flex gap-1 mt-2.5 p-1 bg-slate-950/60 border border-slate-800/60 rounded-lg text-xs">
+              <button
+                onClick={() => setActiveTab("report")}
+                className={`flex-1 py-1 rounded-md font-semibold text-[11px] transition-all duration-150 ${
+                  activeTab === "report"
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Trust Report
+              </button>
+              <button
+                onClick={() => setActiveTab("analytics")}
+                className={`flex-1 py-1 rounded-md font-semibold text-[11px] transition-all duration-150 ${
+                  activeTab === "analytics"
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                Analytics
+              </button>
+            </div>
           </div>
         )}
 
+        {/* --- Analytics Tab View --- */}
+        {activeTab === "analytics" && displayDomain && state !== "UNSUPPORTED" && (
+          <AnalyticsDashboard domain={displayDomain} isStaleCache={isCached && cacheStatus === "STALE"} />
+        )}
+
         {/* --- IDLE State --- */}
-        {state === "IDLE" && !viewingHistoryDomain && (
+        {activeTab === "report" && state === "IDLE" && !viewingHistoryDomain && (
           <div className="flex flex-col justify-center items-center px-6 py-8 text-center">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/25 mb-5">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -391,7 +422,7 @@ function App() {
         )}
 
         {/* --- RESULT State --- */}
-        {state === "RESULT" && scanResult?.trust_report && (
+        {activeTab === "report" && state === "RESULT" && scanResult?.trust_report && (
           <div className="flex flex-col px-5 py-5 gap-4">
             {/* Freshness indicator */}
             {isCached && cacheStatus === "FRESH" && (

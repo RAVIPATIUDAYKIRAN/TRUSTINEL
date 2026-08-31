@@ -157,3 +157,63 @@ export async function getScan(scanId: string): Promise<ScanResponse> {
     throw new ApiError("Received an invalid response format from the server.");
   }
 }
+
+export type DomainTrend = "IMPROVING" | "DEGRADING" | "STABLE" | "INSUFFICIENT_DATA";
+
+export interface RiskDistribution {
+  low: number;
+  medium: number;
+  high: number;
+}
+
+export interface DomainScanTimelineItem {
+  scan_id: string;
+  trust_score: number;
+  risk_level: string;
+  summary: string;
+  scanned_at: string;
+}
+
+export interface DomainAnalyticsResponse {
+  domain: string;
+  total_scans: number;
+  current_trust_score: number | null;
+  average_trust_score: number;
+  min_trust_score: number | null;
+  max_trust_score: number | null;
+  score_delta: number | null;
+  trend: DomainTrend;
+  risk_distribution: RiskDistribution;
+  first_scanned_at: string | null;
+  last_scanned_at: string | null;
+  history_timeline: DomainScanTimelineItem[];
+}
+
+export async function getDomainAnalytics(domain: string): Promise<DomainAnalyticsResponse> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  let response: Response;
+  const cleanDomain = encodeURIComponent(domain.trim());
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/analytics/domain/${cleanDomain}`, {
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiError("Request timed out waiting for analysis server response.");
+    }
+    throw new ApiError("Could not reach the TRUSTINEL analysis server. Is the backend running?");
+  }
+  clearTimeout(timeoutId);
+
+  if (!response.ok) {
+    await handleResponseError(response);
+  }
+
+  try {
+    return (await response.json()) as DomainAnalyticsResponse;
+  } catch {
+    throw new ApiError("Received an invalid response format from the server.");
+  }
+}

@@ -27,6 +27,12 @@ setup_logging()
 logger = logging.getLogger("trustinel.main")
 
 from app.api.scan import router as scan_router
+from app.api.analytics import router as analytics_router
+from app.api.reputation import router as reputation_router
+from app.api.ssl import router as ssl_router
+from app.api.phishing import router as phishing_router
+from app.api.headers import router as headers_router
+from app.api.batch import router as batch_router
 
 
 @asynccontextmanager
@@ -82,6 +88,12 @@ app.add_middleware(
     allow_headers=["*"]
 )
 app.include_router(scan_router)
+app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(reputation_router, prefix="/api/v1")
+app.include_router(ssl_router, prefix="/api/v1")
+app.include_router(phishing_router, prefix="/api/v1")
+app.include_router(headers_router, prefix="/api/v1")
+app.include_router(batch_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])
