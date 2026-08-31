@@ -33,6 +33,9 @@ from app.api.ssl import router as ssl_router
 from app.api.phishing import router as phishing_router
 from app.api.headers import router as headers_router
 from app.api.batch import router as batch_router
+from app.api.api_keys import router as api_keys_router
+from app.api.export import router as export_router
+from app.api.webhooks import router as webhooks_router
 
 
 @asynccontextmanager
@@ -94,6 +97,9 @@ app.include_router(ssl_router, prefix="/api/v1")
 app.include_router(phishing_router, prefix="/api/v1")
 app.include_router(headers_router, prefix="/api/v1")
 app.include_router(batch_router, prefix="/api/v1")
+app.include_router(api_keys_router, prefix="/api/v1")
+app.include_router(export_router, prefix="/api/v1")
+app.include_router(webhooks_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])

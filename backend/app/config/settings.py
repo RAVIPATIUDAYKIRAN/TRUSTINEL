@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_GET_SCAN: int = 60
     RATE_LIMIT_AI_STATUS: int = 30
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+    STANDARD_RATE_LIMIT_PER_MINUTE: int = 60
+    ENTERPRISE_RATE_LIMIT_PER_MINUTE: int = 300
 
     # AI Risk Explanation Configuration
     AI_EXPLANATION_ENABLED: bool = False

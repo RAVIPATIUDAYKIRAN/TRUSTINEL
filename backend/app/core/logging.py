@@ -41,6 +41,8 @@ def sanitize_correlation_id(cid: Optional[str]) -> str:
 
 # Security redaction patterns to prevent leaking sensitive secrets in logs
 REDACTION_PATTERNS = [
+    (re.compile(r"whsec_[a-zA-Z0-9_-]{10,}", re.IGNORECASE), "whsec_[REDACTED_WEBHOOK_SECRET]"),
+    (re.compile(r"trn_live_[a-zA-Z0-9_-]{10,}", re.IGNORECASE), "trn_live_[REDACTED_API_KEY]"),
     (re.compile(r"sk-[a-zA-Z0-9_-]{10,}", re.IGNORECASE), "sk-[REDACTED_API_KEY]"),
     (re.compile(r"Bearer\s+[a-zA-Z0-9._-]+", re.IGNORECASE), "Bearer [REDACTED_TOKEN]"),
     (re.compile(r"(postgresql\+asyncpg|postgresql|postgres|mysql|redis)://[^:\s]+:[^@\s]+@[^\s]+", re.IGNORECASE), r"\1://[REDACTED_CREDENTIALS]"),

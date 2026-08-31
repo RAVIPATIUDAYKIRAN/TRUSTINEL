@@ -9,6 +9,7 @@ Thumbs.db
 *.swo
 
 # Environment Variables
+*.env.example
 .env
 .env.local
 .env.*.local

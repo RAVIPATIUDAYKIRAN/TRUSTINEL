@@ -4,17 +4,26 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from redis.asyncio import Redis, from_url
 from app.config.settings import settings
 
+from sqlalchemy.pool import NullPool
+
 logger = logging.getLogger("trustinel.database")
 
 # SQLAlchemy Async Engine and Session
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+    "pool_pre_ping": True,
+}
+if getattr(settings, "ENVIRONMENT", "development") in ["testing", "development"]:
+    engine_kwargs["poolclass"] = NullPool
+else:
+    engine_kwargs["pool_size"] = getattr(settings, "DB_POOL_SIZE", 10)
+    engine_kwargs["max_overflow"] = getattr(settings, "DB_MAX_OVERFLOW", 20)
+    engine_kwargs["pool_timeout"] = getattr(settings, "DB_POOL_TIMEOUT", 30.0)
+
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=False,
-    future=True,
-    pool_pre_ping=True,
-    pool_size=getattr(settings, "DB_POOL_SIZE", 10),
-    max_overflow=getattr(settings, "DB_MAX_OVERFLOW", 20),
-    pool_timeout=getattr(settings, "DB_POOL_TIMEOUT", 30.0)
+    **engine_kwargs
 )
 
 async_session = async_sessionmaker(
@@ -44,5 +53,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
 
 async def close_connections() -> None:
     logger.info("Closing database and redis engine connections...")
-    await engine.dispose()
-    await redis_client.close()
+    try:
+        await engine.dispose()
+    except Exception:
+        pass
+    try:
+        await redis_client.close()
+    except Exception:
+        pass
