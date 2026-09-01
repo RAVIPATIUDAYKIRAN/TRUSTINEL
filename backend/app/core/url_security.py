@@ -37,6 +37,8 @@ NON_PUBLIC_IPV4_NETWORKS = [
     ipaddress.ip_network("0.0.0.0/8"),         # This host on this network (RFC 1122)
 ]
 
+NAT64_WELL_KNOWN_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+
 
 class URLSecurityValidator:
     """
@@ -101,11 +103,15 @@ class URLSecurityValidator:
         Evaluates whether an IPv4 or IPv6 address is a legitimate public destination.
         Returns False if the IP address is loopback, private, link-local, multicast,
         reserved, unspecified, or Carrier-Grade NAT.
+        Supports NAT64 Well-Known Prefix (64:ff9b::/96) by validating embedded IPv4.
         """
         # Handle IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1)
         if isinstance(ip_obj, ipaddress.IPv6Address):
             if ip_obj.ipv4_mapped:
                 return URLSecurityValidator.is_ip_public(ip_obj.ipv4_mapped)
+            if ip_obj in NAT64_WELL_KNOWN_PREFIX:
+                embedded_ipv4 = ipaddress.IPv4Address(ip_obj.packed[-4:])
+                return URLSecurityValidator.is_ip_public(embedded_ipv4)
 
         if (
             ip_obj.is_loopback

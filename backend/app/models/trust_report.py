@@ -79,6 +79,50 @@ class TrustReport(Base):
         doc="Concise user recommendation based on the trust evaluation."
     )
 
+    # Multi-Dimensional Risk Intelligence SQL Columns
+    technical_trust_score: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        default=None,
+        doc="Technical security score (0-100)."
+    )
+    content_risk_score: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        default=None,
+        doc="Content scam risk score (0-100)."
+    )
+    reputation_risk_score: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        default=None,
+        doc="Reputation threat score (0-100)."
+    )
+    behavioral_risk_score: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        default=None,
+        doc="Domain age & behavioral anomaly risk score (0-100)."
+    )
+    overall_risk_score: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        default=None,
+        doc="Aggregated overall scam risk score (0-100)."
+    )
+    overall_risk_level: Mapped[Optional[RiskLevel]] = mapped_column(
+        Enum(RiskLevel),
+        nullable=True,
+        default=None,
+        doc="Aggregated overall scam risk level."
+    )
+    risk_factors: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc="JSON-serialized list of multi-dimensional risk factors."
+    )
+
     # Relationships
     website_scan: Mapped["WebsiteScan"] = relationship(
         back_populates="trust_report",

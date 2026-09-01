@@ -12,6 +12,7 @@ class ScanCreateRequest(BaseModel):
     Schema for initiating a new website trust scan.
     """
     url: HttpUrl = Field(..., description="The full website URL to scan (must start with http:// or https://).")
+    page_html: Optional[str] = Field(None, description="Optional active tab rendered HTML content passed directly from the Chrome extension.")
 
     @field_validator("url", mode="before")
     @classmethod

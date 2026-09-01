@@ -11,6 +11,8 @@ VALID_EVIDENCE_CATEGORIES = {
     "SECURITY_HEADERS",
     "REDIRECTS",
     "DETERMINISTIC_TRUST",
+    "CONTENT_ANALYSIS",
+    "REPUTATION",
 }
 
 
@@ -20,7 +22,7 @@ class AIEvidenceMapping(BaseModel):
     """
     category: str = Field(
         ...,
-        description="Evidence category ('SSL', 'WHOIS', 'SECURITY_HEADERS', 'REDIRECTS', or 'DETERMINISTIC_TRUST')."
+        description="Evidence category ('SSL', 'WHOIS', 'SECURITY_HEADERS', 'REDIRECTS', 'CONTENT_ANALYSIS', 'REPUTATION', or 'DETERMINISTIC_TRUST')."
     )
     finding: str = Field(
         ...,
@@ -43,6 +45,10 @@ class AIEvidenceMapping(BaseModel):
             "TRUST": "DETERMINISTIC_TRUST",
             "DETERMINISTIC": "DETERMINISTIC_TRUST",
             "REDIRECT": "REDIRECTS",
+            "CONTENT": "CONTENT_ANALYSIS",
+            "CONTENT_SCAM": "CONTENT_ANALYSIS",
+            "MULTI_RISK": "DETERMINISTIC_TRUST",
+            "MULTI_DIMENSIONAL_RISK": "DETERMINISTIC_TRUST",
         }
         category = alias_map.get(upper_v, upper_v)
         if category not in VALID_EVIDENCE_CATEGORIES:

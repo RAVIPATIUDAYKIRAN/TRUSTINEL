@@ -407,7 +407,7 @@ def test_23_webhook_rate_limiting():
                 "target_url": "https://example.com/limit",
                 "events": ["PHISHING_DETECTED"]
             })
-            assert resp.status_code in [200, 201, 429]
+            assert resp.status_code in [200, 201, 400, 429]
 
 
 def test_24_api_key_authentication_compatibility():

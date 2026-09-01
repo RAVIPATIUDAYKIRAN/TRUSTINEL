@@ -186,3 +186,23 @@ def test_api_ssrf_url_returns_403():
         assert resp.status_code == 403
         assert resp.json()["error_code"] == "URL_NOT_ALLOWED"
         mock_fetch.assert_not_called()
+
+
+def test_nat64_ipv6_public_destination_allowed():
+    """29. Verify public destination mapped through IPv6 NAT64 prefix (64:ff9b::/96) is accepted."""
+    import ipaddress
+    # 64:ff9b::17ca:e587 translates to 23.202.229.135 (eBay public IPv4)
+    nat64_public_ip = ipaddress.IPv6Address("64:ff9b::17ca:e587")
+    assert URLSecurityValidator.is_ip_public(nat64_public_ip) is True
+
+
+def test_nat64_ipv6_private_destination_blocked():
+    """30. Verify restricted loopback/private IPv4 mapped through IPv6 NAT64 prefix is BLOCKED."""
+    import ipaddress
+    # 64:ff9b::7f00:0001 translates to 127.0.0.1 (Loopback IPv4)
+    nat64_loopback_ip = ipaddress.IPv6Address("64:ff9b::7f00:0001")
+    assert URLSecurityValidator.is_ip_public(nat64_loopback_ip) is False
+
+    # 64:ff9b::0a00:0001 translates to 10.0.0.1 (Private IPv4)
+    nat64_private_ip = ipaddress.IPv6Address("64:ff9b::0a00:0001")
+    assert URLSecurityValidator.is_ip_public(nat64_private_ip) is False

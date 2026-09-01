@@ -96,7 +96,7 @@ async def create_scan(
     )
 
     # Delegate orchestration execution to ScanService
-    return await service.create_scan(url=str(request.url))
+    return await service.create_scan(url=str(request.url), page_html=request.page_html)
 
 
 @router.get(

@@ -31,6 +31,13 @@ export interface TrustReport {
   positive_signals: string[];
   recommendation: string | null;
   ai_threat_analysis?: AIThreatAnalysisResult | null;
+  technical_trust_score?: number | null;
+  content_risk_score?: number | null;
+  reputation_risk_score?: number | null;
+  behavioral_risk_score?: number | null;
+  overall_risk_score?: number | null;
+  overall_risk_level?: "LOW" | "MEDIUM" | "HIGH" | null;
+  risk_factors?: string[];
 }
 
 export interface ScanResponse {
@@ -99,15 +106,19 @@ async function handleResponseError(response: Response): Promise<never> {
   throw new ApiError(detail, response.status, errorCode, retryAfterSeconds);
 }
 
-export async function scanWebsite(url: string): Promise<ScanResponse> {
+export async function scanWebsite(url: string, pageHtml?: string): Promise<ScanResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   let response: Response;
   try {
+    const payload: { url: string; page_html?: string } = { url };
+    if (pageHtml && typeof pageHtml === "string" && pageHtml.trim().length > 0) {
+      payload.page_html = pageHtml;
+    }
     response = await fetch(`${API_BASE_URL}/api/v1/scan`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
   } catch (err) {
@@ -132,7 +143,7 @@ export async function scanWebsite(url: string): Promise<ScanResponse> {
 
 export async function getScan(scanId: string): Promise<ScanResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}/api/v1/scan/${scanId}`, {
@@ -170,6 +181,8 @@ export interface DomainScanTimelineItem {
   scan_id: string;
   trust_score: number;
   risk_level: string;
+  overall_risk_score?: number;
+  overall_risk_level?: string;
   summary: string;
   scanned_at: string;
 }
@@ -177,21 +190,29 @@ export interface DomainScanTimelineItem {
 export interface DomainAnalyticsResponse {
   domain: string;
   total_scans: number;
-  current_trust_score: number | null;
-  average_trust_score: number;
-  min_trust_score: number | null;
-  max_trust_score: number | null;
-  score_delta: number | null;
+  current_scam_risk?: number | null;
+  average_scam_risk?: number;
+  min_scam_risk?: number | null;
+  max_scam_risk?: number | null;
+  scam_risk_delta?: number | null;
   trend: DomainTrend;
   risk_distribution: RiskDistribution;
   first_scanned_at: string | null;
   last_scanned_at: string | null;
   history_timeline: DomainScanTimelineItem[];
+  current_technical_score?: number | null;
+  average_technical_score?: number;
+  // Legacy aliases
+  current_trust_score?: number | null;
+  average_trust_score?: number;
+  min_trust_score?: number | null;
+  max_trust_score?: number | null;
+  score_delta?: number | null;
 }
 
 export async function getDomainAnalytics(domain: string): Promise<DomainAnalyticsResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   let response: Response;
   const cleanDomain = encodeURIComponent(domain.trim());
   try {

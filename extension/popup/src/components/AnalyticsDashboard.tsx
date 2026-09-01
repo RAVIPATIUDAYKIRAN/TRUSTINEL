@@ -135,9 +135,12 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
   const medPct = Math.round((medCount / totalRiskCount) * 100);
   const highPct = Math.round((highCount / totalRiskCount) * 100);
 
-  const delta = data.score_delta;
+  const currentScamRisk = data.current_scam_risk ?? data.current_trust_score ?? "N/A";
+  const avgScamRisk = data.average_scam_risk !== undefined ? data.average_scam_risk.toFixed(1) : (data.average_trust_score !== undefined ? data.average_trust_score.toFixed(1) : "N/A");
+
+  const delta = data.scam_risk_delta ?? data.score_delta;
   const deltaText = delta !== null && delta !== undefined ? (delta > 0 ? `+${delta}` : `${delta}`) : "N/A";
-  const deltaColor = delta !== null && delta !== undefined ? (delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-slate-400") : "text-slate-400";
+  const deltaColor = delta !== null && delta !== undefined ? (delta > 0 ? "text-red-400" : delta < 0 ? "text-emerald-400" : "text-slate-400") : "text-slate-400";
 
   return (
     <div className="flex flex-col p-4 gap-4">
@@ -154,7 +157,7 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
       {/* Domain & Trend Header */}
       <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
         <div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Historical Trajectory</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Overall Scam Risk Trajectory</span>
           <h2 className="text-sm font-extrabold text-slate-100 truncate max-w-[200px]">{data.domain}</h2>
         </div>
         <span className={`px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${trend.badgeClasses}`}>
@@ -163,34 +166,34 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
         </span>
       </div>
 
-      {/* Metrics Grid */}
+      {/* Primary Metrics Grid: Overall Scam Risk */}
       <div className="grid grid-cols-3 gap-2">
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col items-center text-center">
-          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Current</span>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Current Scam Risk</span>
           <span className="text-lg font-black text-blue-400 mt-0.5">
-            {data.current_trust_score !== null ? data.current_trust_score : "N/A"}
+            {currentScamRisk}
           </span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col items-center text-center">
-          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Average</span>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Average Risk</span>
           <span className="text-lg font-black text-slate-200 mt-0.5">
-            {data.average_trust_score !== undefined ? data.average_trust_score.toFixed(1) : "N/A"}
+            {avgScamRisk}
           </span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col items-center text-center">
-          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Delta</span>
+          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Risk Delta</span>
           <span className={`text-lg font-black mt-0.5 ${deltaColor}`}>{deltaText}</span>
         </div>
       </div>
 
-      {/* Secondary Metrics Bar */}
+      {/* Secondary Metrics Bar: Technical Security & Scans */}
       <div className="flex justify-between items-center px-3 py-2 rounded-xl bg-slate-900/40 border border-slate-800/40 text-xs">
         <div className="flex items-center gap-1.5">
-          <span className="text-slate-500 font-medium">Range:</span>
-          <span className="font-bold text-slate-300">
-            {data.min_trust_score ?? "N/A"} – {data.max_trust_score ?? "N/A"}
+          <span className="text-slate-500 font-medium">Technical Security:</span>
+          <span className="font-bold text-emerald-400">
+            {data.current_technical_score ?? "N/A"} / 100
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -202,7 +205,7 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
       {/* Risk Distribution Section */}
       <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 flex flex-col gap-2">
         <div className="flex justify-between items-center">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Risk Level Distribution</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Scam Risk Level Distribution</span>
           <span className="text-[10px] font-semibold text-slate-400">{totalScans} total scans</span>
         </div>
 
@@ -236,10 +239,13 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
         {data.history_timeline && data.history_timeline.length > 0 ? (
           <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1">
             {data.history_timeline.map((item, idx) => {
+              const effectiveLevel = item.overall_risk_level || item.risk_level;
+              const effectiveScore = item.overall_risk_score ?? (item.risk_level === "HIGH" ? 85 : item.risk_level === "MEDIUM" ? 55 : 15);
+
               const riskBadgeClass =
-                item.risk_level === "LOW"
+                effectiveLevel === "LOW"
                   ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
-                  : item.risk_level === "MEDIUM"
+                  : effectiveLevel === "MEDIUM"
                   ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
                   : "border-red-500/40 text-red-400 bg-red-500/10";
 
@@ -248,9 +254,9 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-slate-300">{formatDate(item.scanned_at)}</span>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-slate-200">{item.trust_score}</span>
+                      <span className="font-black text-slate-200">Scam Risk: {effectiveScore}</span>
                       <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold uppercase ${riskBadgeClass}`}>
-                        {item.risk_level}
+                        {effectiveLevel}
                       </span>
                     </div>
                   </div>

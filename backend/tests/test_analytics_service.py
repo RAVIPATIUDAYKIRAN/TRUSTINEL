@@ -17,7 +17,7 @@ def test_normalize_domain_input_variations():
 
 @pytest.mark.asyncio
 async def test_analytics_service_calculates_improving_trend():
-    """Verify AnalyticsService calculates IMPROVING trend when score increases by >3."""
+    """Verify AnalyticsService calculates IMPROVING trend when scam risk decreases (scam risk drops)."""
     mock_scan_repo = AsyncMock()
 
     now = datetime.now(timezone.utc)
@@ -26,12 +26,12 @@ async def test_analytics_service_calculates_improving_trend():
     scan_newest = MagicMock()
     scan_newest.id = "scan-uuid-1"
     scan_newest.created_at = now
-    scan_newest.trust_report = MagicMock(trust_score=95, risk_level="LOW", summary="Excellent trust")
+    scan_newest.trust_report = MagicMock(trust_score=95, risk_level="LOW", overall_risk_score=15, overall_risk_level="LOW", summary="Excellent trust")
 
     scan_older = MagicMock()
     scan_older.id = "scan-uuid-2"
     scan_older.created_at = now
-    scan_older.trust_report = MagicMock(trust_score=70, risk_level="MEDIUM", summary="Moderate trust")
+    scan_older.trust_report = MagicMock(trust_score=70, risk_level="MEDIUM", overall_risk_score=40, overall_risk_level="MEDIUM", summary="Moderate trust")
 
     mock_scan_repo.list_scans_by_domain.return_value = [scan_newest, scan_older]
 
@@ -41,11 +41,11 @@ async def test_analytics_service_calculates_improving_trend():
     assert result is not None
     assert result.domain == "example.com"
     assert result.total_scans == 2
-    assert result.current_trust_score == 95
-    assert result.average_trust_score == 82.5
-    assert result.min_trust_score == 70
-    assert result.max_trust_score == 95
-    assert result.score_delta == 25
+    assert result.current_scam_risk == 15
+    assert result.average_scam_risk == 27.5
+    assert result.min_scam_risk == 15
+    assert result.max_scam_risk == 40
+    assert result.scam_risk_delta == -25
     assert result.trend == DomainTrend.IMPROVING
     assert result.risk_distribution.low == 1
     assert result.risk_distribution.medium == 1
@@ -55,7 +55,7 @@ async def test_analytics_service_calculates_improving_trend():
 
 @pytest.mark.asyncio
 async def test_analytics_service_calculates_degrading_trend():
-    """Verify AnalyticsService calculates DEGRADING trend when score drops by >3."""
+    """Verify AnalyticsService calculates DEGRADING trend when scam risk increases."""
     mock_scan_repo = AsyncMock()
 
     now = datetime.now(timezone.utc)
@@ -63,12 +63,12 @@ async def test_analytics_service_calculates_degrading_trend():
     scan_newest = MagicMock()
     scan_newest.id = "scan-uuid-1"
     scan_newest.created_at = now
-    scan_newest.trust_report = MagicMock(trust_score=40, risk_level="HIGH", summary="High risk detected")
+    scan_newest.trust_report = MagicMock(trust_score=40, risk_level="HIGH", overall_risk_score=75, overall_risk_level="HIGH", summary="High risk detected")
 
     scan_older = MagicMock()
     scan_older.id = "scan-uuid-2"
     scan_older.created_at = now
-    scan_older.trust_report = MagicMock(trust_score=85, risk_level="LOW", summary="Low risk")
+    scan_older.trust_report = MagicMock(trust_score=85, risk_level="LOW", overall_risk_score=15, overall_risk_level="LOW", summary="Low risk")
 
     mock_scan_repo.list_scans_by_domain.return_value = [scan_newest, scan_older]
 
@@ -76,7 +76,7 @@ async def test_analytics_service_calculates_degrading_trend():
     result = await service.get_domain_analytics("risky-site.com")
 
     assert result is not None
-    assert result.score_delta == -45
+    assert result.scam_risk_delta == 60
     assert result.trend == DomainTrend.DEGRADING
     assert result.risk_distribution.high == 1
     assert result.risk_distribution.low == 1

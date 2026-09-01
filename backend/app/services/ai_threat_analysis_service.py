@@ -65,9 +65,9 @@ class OpenAIThreatProvider(AIThreatProvider):
         "security evidence collected from a website. Your job is to produce an evidence-grounded, "
         "explainable threat analysis.\n\n"
         "STRICT GROUNDING & EXPLAINABILITY RULES:\n"
-        "- Reason ONLY from the supplied evidence ('ssl', 'whois', 'headers', 'redirects', 'trust_evaluation').\n"
+        "- Reason ONLY from the supplied evidence ('ssl', 'whois', 'headers', 'redirects', 'content_analysis', 'reputation', 'multi_dimensional_risk', 'trust_evaluation').\n"
         "- Every finding MUST be mapped to one of the exact evidence categories: 'SSL', 'WHOIS', "
-        "'SECURITY_HEADERS', 'REDIRECTS', or 'DETERMINISTIC_TRUST'.\n"
+        "'SECURITY_HEADERS', 'REDIRECTS', 'CONTENT_ANALYSIS', 'REPUTATION', or 'DETERMINISTIC_TRUST'.\n"
         "- Consider BOTH positive signals (e.g. valid SSL certificate, established domain age) and negative signals. "
         "Include positive evidence in evidence_mappings when it explains why threat is LOW or MEDIUM.\n"
         "- Acknowledge evidence conflicts (e.g. valid SSL + old domain BUT unsafe redirect) in your reasoning.\n"
@@ -102,7 +102,7 @@ class OpenAIThreatProvider(AIThreatProvider):
         '  "recommended_action": "...",\n'
         '  "evidence_mappings": [\n'
         '    {\n'
-        '      "category": "SSL"|"WHOIS"|"SECURITY_HEADERS"|"REDIRECTS"|"DETERMINISTIC_TRUST",\n'
+        '      "category": "SSL"|"WHOIS"|"SECURITY_HEADERS"|"REDIRECTS"|"CONTENT_ANALYSIS"|"REPUTATION"|"DETERMINISTIC_TRUST",\n'
         '      "finding": "...",\n'
         '      "impact": "..."\n'
         '    }\n'
@@ -205,6 +205,10 @@ class AIThreatAnalysisService:
         whois_result: WHOISAnalysisResult,
         header_result: HeaderAnalysisResult,
         redirect_result: RedirectAnalysisResult,
+        content_result: Optional[Any] = None,
+        reputation_result: Optional[Any] = None,
+        multi_risk: Optional[Any] = None,
+        domain: Optional[str] = None,
     ) -> AIThreatAnalysisResult:
         """
         Produces an AIThreatAnalysisResult. Uses the configured AI provider when enabled;
@@ -212,7 +216,8 @@ class AIThreatAnalysisService:
         """
         evidence = self._build_evidence(
             trust_evaluation, ssl_result, whois_result,
-            header_result, redirect_result
+            header_result, redirect_result, content_result,
+            reputation_result, multi_risk
         )
 
         if not self._is_ai_enabled():
@@ -220,11 +225,9 @@ class AIThreatAnalysisService:
             return self._get_fallback(trust_evaluation)
 
         # Domain extraction for cache key
-        domain = getattr(trust_evaluation, "domain", None) or "unknown"
-        if domain == "unknown":
-            domain = getattr(whois_result, "domain", None) or "unknown"
+        clean_domain = (domain or getattr(trust_evaluation, "domain", None) or getattr(whois_result, "domain", None) or "unknown").strip().lower()
 
-        cache_key = self._generate_cache_key(domain, evidence)
+        cache_key = self._generate_cache_key(clean_domain, evidence)
         ttl = getattr(settings, "AI_THREAT_ANALYSIS_CACHE_TTL_SECONDS", 600)
         provider_name = (settings.AI_THREAT_ANALYSIS_PROVIDER or "").lower()
 
@@ -232,10 +235,10 @@ class AIThreatAnalysisService:
         cached_result = await self._get_from_cache(cache_key)
         if cached_result is not None:
             logger.info(
-                f"[TRUSTINEL] AI Threat Analysis cache hit for domain '{domain}'.",
+                f"[TRUSTINEL] AI Threat Analysis cache hit for domain '{clean_domain}'.",
                 extra={
                     "event": "ai_threat_analysis_cache_hit",
-                    "domain": domain,
+                    "domain": clean_domain,
                     "provider": provider_name,
                     "cache_hit": True
                 }
@@ -243,10 +246,10 @@ class AIThreatAnalysisService:
             return cached_result
 
         logger.info(
-            f"[TRUSTINEL] AI Threat Analysis cache miss for domain '{domain}'.",
+            f"[TRUSTINEL] AI Threat Analysis cache miss for domain '{clean_domain}'.",
             extra={
                 "event": "ai_threat_analysis_cache_miss",
-                "domain": domain,
+                "domain": clean_domain,
                 "provider": provider_name,
                 "cache_hit": False
             }
@@ -427,8 +430,11 @@ class AIThreatAnalysisService:
         whois_result: WHOISAnalysisResult,
         header_result: HeaderAnalysisResult,
         redirect_result: RedirectAnalysisResult,
+        content_result: Optional[Any] = None,
+        reputation_result: Optional[Any] = None,
+        multi_risk: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        return {
+        evidence = {
             "trust_evaluation": {
                 "trust_score": getattr(trust_evaluation, "trust_score", 50),
                 "risk_level": getattr(trust_evaluation.risk_level, "value", str(getattr(trust_evaluation, "risk_level", "MEDIUM"))),
@@ -457,6 +463,39 @@ class AIThreatAnalysisService:
                 "error": getattr(redirect_result, "error", None),
             },
         }
+
+        if content_result:
+            evidence["content_analysis"] = {
+                "content_risk_score": getattr(content_result, "content_risk_score", 0),
+                "signals": [
+                    {
+                        "category": str(getattr(s, "category", "")),
+                        "severity": str(getattr(s, "severity", "")),
+                        "evidence": str(getattr(s, "evidence", "")),
+                        "reason": str(getattr(s, "reason", ""))
+                    }
+                    for s in (getattr(content_result, "signals", []) or [])
+                ]
+            }
+
+        if reputation_result:
+            evidence["reputation"] = {
+                "status": str(getattr(reputation_result, "status", "UNKNOWN")),
+                "reputation_score": getattr(reputation_result, "reputation_score", 100),
+                "matched_lists": getattr(reputation_result, "matched_lists", [])
+            }
+
+        if multi_risk:
+            evidence["multi_dimensional_risk"] = {
+                "technical_trust_score": getattr(multi_risk, "technical_trust_score", 50),
+                "content_risk_score": getattr(multi_risk, "content_risk_score", 0),
+                "behavioral_risk_score": getattr(multi_risk, "behavioral_risk_score", 0),
+                "reputation_risk_score": getattr(multi_risk, "reputation_risk_score", 0),
+                "overall_risk_score": getattr(multi_risk, "overall_risk_score", 50),
+                "overall_risk_level": str(getattr(getattr(multi_risk, "overall_risk_level", None), "value", getattr(multi_risk, "overall_risk_level", "MEDIUM")))
+            }
+
+        return evidence
 
     # ------------------------------------------------------------------
     # Configuration Helpers
@@ -487,7 +526,10 @@ class AIThreatAnalysisService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _get_fallback(trust_evaluation: TrustEvaluationResult) -> AIThreatAnalysisResult:
+    def _get_fallback(
+        trust_evaluation: TrustEvaluationResult,
+        reason_text: str = "AI threat analysis is unavailable (Provider configuration missing or API key not configured)."
+    ) -> AIThreatAnalysisResult:
         reasons = getattr(trust_evaluation, "reasons", []) or []
         raw_indicators = [
             reason for reason in reasons if ": -" in reason
@@ -511,7 +553,7 @@ class AIThreatAnalysisService:
             threat_level="UNKNOWN",
             confidence=0.0,
             suspicious_indicators=deduped[:10],
-            reasoning="AI threat analysis is disabled.",
-            recommended_action="Follow deterministic trust assessment recommendation.",
+            reasoning=reason_text,
+            recommended_action="Refer to deterministic Multi-Dimensional Scam Risk assessment.",
             evidence_mappings=mappings[:10],
         )

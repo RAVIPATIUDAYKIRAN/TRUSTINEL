@@ -36,12 +36,26 @@ export default function AIThreatAnalysis({ aiThreat }: AIThreatAnalysisProps) {
   const [showEvidence, setShowEvidence] = useState(false);
 
   if (!aiThreat || !aiThreat.enabled) {
+    const reasonText = aiThreat?.reasoning || "AI provider API key / model configuration is missing or unconfigured.";
     return (
-      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-slate-500" />
-        <span className="text-[11px] font-medium text-slate-400">
-          AI Threat Analysis unavailable
-        </span>
+      <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500/80" />
+            <span className="text-[10px] font-extrabold tracking-widest text-slate-400 uppercase">
+              AI Threat Assessment
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded border border-slate-800 bg-slate-900 text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+            UNAVAILABLE
+          </span>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          {reasonText}
+        </p>
+        <div className="text-[10px] font-semibold text-emerald-400/90 pt-1 border-t border-slate-800/60">
+          ✓ Multi-dimensional scam risk & technical security assessments remain 100% active.
+        </div>
       </div>
     );
   }

@@ -90,7 +90,7 @@ class WHOISAnalyzer(BaseAnalyzer):
         try:
             w = await asyncio.wait_for(
                 asyncio.to_thread(whois.whois, hostname),
-                timeout=15.0
+                timeout=7.0
             )
         except asyncio.TimeoutError:
             logger.warning(f"WHOIS lookup timed out for '{hostname}'")

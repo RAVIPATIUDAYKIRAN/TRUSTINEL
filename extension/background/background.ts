@@ -65,12 +65,13 @@ async function setCachedResult(domain: string, result: CachedScanResult): Promis
 
 function buildCachedResult(domain: string, url: string, scan: ScanResponse): CachedScanResult {
   const report = scan.trust_report!;
+  const effectiveRiskLevel = (report.overall_risk_level || report.risk_level) as "LOW" | "MEDIUM" | "HIGH";
   return {
     scanId: scan.id,
     domain,
     url,
-    trustScore: report.trust_score,
-    riskLevel: report.risk_level,
+    trustScore: report.overall_risk_score ?? report.trust_score,
+    riskLevel: effectiveRiskLevel,
     summary: report.summary,
     explanation: report.explanation,
     keyRisks: report.key_risks,
@@ -125,11 +126,12 @@ async function clearHistory(): Promise<void> {
 
 function buildHistoryEntry(domain: string, scan: ScanResponse): ScanHistoryEntry {
   const report = scan.trust_report!;
+  const effectiveRiskLevel = (report.overall_risk_level || report.risk_level) as "LOW" | "MEDIUM" | "HIGH";
   return {
     domain,
     scanId: scan.id,
-    trustScore: report.trust_score,
-    riskLevel: report.risk_level,
+    trustScore: report.overall_risk_score ?? report.trust_score,
+    riskLevel: effectiveRiskLevel,
     summary: report.summary,
     scannedAt: new Date().toISOString(),
   };
@@ -221,6 +223,41 @@ async function getDomainState(url: string): Promise<DomainState> {
 // Scan orchestration
 // ---------------------------------------------------------------------------
 
+async function getTabRenderedDom(tabId: number): Promise<string | undefined> {
+  try {
+    const res = await new Promise<{ success: boolean; html?: string }>((resolve) => {
+      chrome.tabs.sendMessage(tabId, { type: "GET_RENDERED_DOM" }, (response) => {
+        if (chrome.runtime.lastError || !response || !response.success) {
+          resolve({ success: false });
+          return;
+        }
+        resolve(response);
+      });
+    });
+    if (res.success && res.html && res.html.trim().length > 0) {
+      console.log("[TRUSTINEL] Extracted rendered DOM via content script. Length:", res.html.length);
+      return res.html.slice(0, 500000);
+    }
+  } catch {
+    // Content script message channel unavailable
+  }
+
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => (document.documentElement ? document.documentElement.outerHTML.slice(0, 500000) : ""),
+    });
+    if (results && results[0] && typeof results[0].result === "string" && results[0].result.trim().length > 0) {
+      console.log("[TRUSTINEL] Extracted rendered DOM via executeScript. Length:", results[0].result.length);
+      return results[0].result;
+    }
+  } catch {
+    // Script execution restricted
+  }
+
+  return undefined;
+}
+
 async function performScan(
   url: string,
   sendResponse: (response: ScanMessageResponse) => void
@@ -248,7 +285,8 @@ async function performScan(
   }
 
   try {
-    const data = await scanWebsite(url);
+    const pageHtml = activeTabId ? await getTabRenderedDom(activeTabId) : undefined;
+    const data = await scanWebsite(url, pageHtml);
     console.log("[TRUSTINEL] Scan completed. Score:", data.trust_report?.trust_score);
 
     if (data.trust_report) {
@@ -259,7 +297,8 @@ async function performScan(
       await addToHistory(historyEntry);
 
       if (activeTabId) {
-        await updateBadge(activeTabId, data.trust_report.risk_level);
+        const effectiveLevel = (data.trust_report.overall_risk_level || data.trust_report.risk_level) as "LOW" | "MEDIUM" | "HIGH";
+        await updateBadge(activeTabId, effectiveLevel);
       }
     }
 
@@ -312,7 +351,8 @@ async function performAutoScan(url: string, tabId: number): Promise<void> {
   await updateBadge(tabId, "SCANNING");
 
   try {
-    const data = await scanWebsite(url);
+    const pageHtml = await getTabRenderedDom(tabId);
+    const data = await scanWebsite(url, pageHtml);
     console.log("[TRUSTINEL] Automatic scan completed. Score:", data.trust_report?.trust_score);
 
     if (data.trust_report) {
@@ -322,7 +362,8 @@ async function performAutoScan(url: string, tabId: number): Promise<void> {
       const historyEntry = buildHistoryEntry(domain, data);
       await addToHistory(historyEntry);
 
-      await updateBadge(tabId, data.trust_report.risk_level);
+      const effectiveLevel = (data.trust_report.overall_risk_level || data.trust_report.risk_level) as "LOW" | "MEDIUM" | "HIGH";
+      await updateBadge(tabId, effectiveLevel);
     }
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : String(err);

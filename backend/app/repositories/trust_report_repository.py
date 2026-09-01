@@ -25,11 +25,18 @@ class TrustReportRepository(BaseRepository):
         explanation: Optional[str] = None,
         key_risks: Optional[List[str]] = None,
         positive_signals: Optional[List[str]] = None,
-        recommendation: Optional[str] = None
+        recommendation: Optional[str] = None,
+        technical_trust_score: Optional[int] = None,
+        content_risk_score: Optional[int] = None,
+        reputation_risk_score: Optional[int] = None,
+        behavioral_risk_score: Optional[int] = None,
+        overall_risk_score: Optional[int] = None,
+        overall_risk_level: Optional[RiskLevel] = None,
+        risk_factors: Optional[List[str]] = None
     ) -> TrustReport:
         """
         Create and persist a new TrustReport linked to a scan.
-        Serializes key_risks and positive_signals as JSON strings.
+        Serializes key_risks, positive_signals, and risk_factors as JSON strings.
         """
         report = TrustReport(
             scan_id=scan_id,
@@ -39,7 +46,14 @@ class TrustReportRepository(BaseRepository):
             explanation=explanation,
             key_risks=json.dumps(key_risks) if key_risks is not None else None,
             positive_signals=json.dumps(positive_signals) if positive_signals is not None else None,
-            recommendation=recommendation
+            recommendation=recommendation,
+            technical_trust_score=technical_trust_score,
+            content_risk_score=content_risk_score,
+            reputation_risk_score=reputation_risk_score,
+            behavioral_risk_score=behavioral_risk_score,
+            overall_risk_score=overall_risk_score,
+            overall_risk_level=overall_risk_level,
+            risk_factors=json.dumps(risk_factors) if risk_factors is not None else None
         )
         self.add(report)
         await self.flush()
