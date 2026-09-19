@@ -8,6 +8,7 @@ import {
   isUnsupportedUrl,
   normalizeDomain,
   cacheKey,
+  domainCacheKey,
   getCacheStatus,
   SCAN_HISTORY_KEY,
   MAX_HISTORY,
@@ -29,35 +30,44 @@ import {
 const scanningDomains = new Set<string>();
 
 /**
- * Tracks domains that have already been auto-scanned in this service worker
+ * Tracks domains/urls that have already been auto-scanned in this service worker
  * session to prevent repeated automatic scans on rapid navigation events.
  * Cleared only when the service worker restarts.
  */
 const autoScannedDomains = new Set<string>();
 
 // ---------------------------------------------------------------------------
-// Cache helpers
+// Cache helpers (Path-Aware with Domain Fallback)
 // ---------------------------------------------------------------------------
 
-async function getCachedResult(domain: string): Promise<CachedScanResult | undefined> {
+async function getCachedResult(urlOrDomain: string): Promise<CachedScanResult | undefined> {
   try {
-    const key = cacheKey(domain);
-    const data = await chrome.storage.local.get(key);
-    const cached = data[key] as CachedScanResult | undefined;
-    if (cached && typeof cached === "object" && cached.scanResponse && cached.riskLevel) {
-      return cached;
+    const pKey = cacheKey(urlOrDomain);
+    const dKey = domainCacheKey(urlOrDomain);
+    const data = await chrome.storage.local.get([pKey, dKey]);
+    
+    const pathCached = data[pKey] as CachedScanResult | undefined;
+    if (pathCached && typeof pathCached === "object" && pathCached.scanResponse && pathCached.riskLevel) {
+      return pathCached;
     }
+
+    const domainCached = data[dKey] as CachedScanResult | undefined;
+    if (domainCached && typeof domainCached === "object" && domainCached.scanResponse && domainCached.riskLevel) {
+      return domainCached;
+    }
+
     return undefined;
   } catch {
     return undefined;
   }
 }
 
-async function setCachedResult(domain: string, result: CachedScanResult): Promise<void> {
+async function setCachedResult(urlOrDomain: string, result: CachedScanResult): Promise<void> {
   try {
-    const key = cacheKey(domain);
-    await chrome.storage.local.set({ [key]: result });
-    console.log("[TRUSTINEL] Cached result for:", domain);
+    const pKey = cacheKey(urlOrDomain);
+    const dKey = domainCacheKey(urlOrDomain);
+    await chrome.storage.local.set({ [pKey]: result, [dKey]: result });
+    console.log("[TRUSTINEL] Path-aware cached result stored for:", urlOrDomain);
   } catch (err) {
     console.error("[TRUSTINEL] Error caching result:", err);
   }
@@ -223,44 +233,120 @@ async function getDomainState(url: string): Promise<DomainState> {
 // Scan orchestration
 // ---------------------------------------------------------------------------
 
-async function getTabRenderedDom(tabId: number): Promise<string | undefined> {
-  try {
-    const res = await new Promise<{ success: boolean; html?: string }>((resolve) => {
-      chrome.tabs.sendMessage(tabId, { type: "GET_RENDERED_DOM" }, (response) => {
-        if (chrome.runtime.lastError || !response || !response.success) {
-          resolve({ success: false });
-          return;
-        }
-        resolve(response);
-      });
-    });
-    if (res.success && res.html && res.html.trim().length > 0) {
-      console.log("[TRUSTINEL] Extracted rendered DOM via content script. Length:", res.html.length);
-      return res.html.slice(0, 500000);
-    }
-  } catch {
-    // Content script message channel unavailable
-  }
+async function resolveActiveWebpageTab(targetUrl?: string): Promise<chrome.tabs.Tab | undefined> {
+  const targetDomain = targetUrl ? normalizeDomain(targetUrl) : "";
 
+  // 1. Try querying normal windows with lastFocusedWindow
   try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => (document.documentElement ? document.documentElement.outerHTML.slice(0, 500000) : ""),
-    });
-    if (results && results[0] && typeof results[0].result === "string" && results[0].result.trim().length > 0) {
-      console.log("[TRUSTINEL] Extracted rendered DOM via executeScript. Length:", results[0].result.length);
-      return results[0].result;
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true, windowType: "normal" });
+    for (const t of tabs) {
+      if (t?.id && t?.url && !isUnsupportedUrl(t.url)) {
+        if (!targetDomain || normalizeDomain(t.url) === targetDomain) {
+          return t;
+        }
+      }
     }
-  } catch {
-    // Script execution restricted
-  }
+  } catch {}
+
+  // 2. Try querying non-focused normal windows (since popup window has focus when open)
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: false, windowType: "normal" });
+    for (const t of tabs) {
+      if (t?.id && t?.url && !isUnsupportedUrl(t.url)) {
+        if (!targetDomain || normalizeDomain(t.url) === targetDomain) {
+          return t;
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Fallback: query all active normal tabs
+  try {
+    const tabs = await chrome.tabs.query({ active: true, windowType: "normal" });
+    for (const t of tabs) {
+      if (t?.id && t?.url && !isUnsupportedUrl(t.url)) {
+        if (!targetDomain || normalizeDomain(t.url) === targetDomain) {
+          return t;
+        }
+      }
+    }
+  } catch {}
 
   return undefined;
 }
 
+async function getTabRenderedDom(tabId: number): Promise<string | undefined> {
+  const attemptExtraction = async (): Promise<string | undefined> => {
+    // A. Send message to content script with 2s timeout
+    try {
+      const res = await new Promise<{ success: boolean; html?: string }>((resolve) => {
+        const timeout = setTimeout(() => resolve({ success: false }), 2000);
+        chrome.tabs.sendMessage(tabId, { type: "GET_RENDERED_DOM" }, (response) => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError || !response || !response.success) {
+            resolve({ success: false });
+            return;
+          }
+          resolve(response);
+        });
+      });
+      if (res.success && res.html && res.html.trim().length > 100) {
+        return res.html.slice(0, 500000);
+      }
+    } catch {}
+
+    // B. Script injection fallback
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          if (!document.documentElement) return "";
+          const clone = document.documentElement.cloneNode(true) as HTMLElement;
+          const inputs = clone.querySelectorAll("input, textarea, select");
+          inputs.forEach((el) => {
+            const input = el as HTMLInputElement;
+            const nameAttr = (input.name || "").toLowerCase();
+            const typeAttr = (input.type || "").toLowerCase();
+            if (typeAttr === "password" || nameAttr.includes("token") || nameAttr.includes("secret") || nameAttr.includes("cvv") || nameAttr.includes("card")) {
+              input.value = "";
+              input.removeAttribute("value");
+            } else if (input.value) {
+              input.value = "[REDACTED]";
+            }
+          });
+          return clone.outerHTML ? clone.outerHTML.slice(0, 500000) : "";
+        },
+      });
+      if (results && results[0] && typeof results[0].result === "string" && results[0].result.trim().length > 100) {
+        return results[0].result;
+      }
+    } catch {}
+
+    return undefined;
+  };
+
+  let html = await attemptExtraction();
+  if (!html || html.length < 2000) {
+    // Bounded settlement wait (500ms max) allowing dynamic SPA JS components to render
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const secondHtml = await attemptExtraction();
+    if (secondHtml && secondHtml.length > (html?.length || 0)) {
+      html = secondHtml;
+    }
+  }
+
+  if (html) {
+    console.log(`[TRUSTINEL-DIAGNOSTIC] DOM_CAPTURE_SUCCESS tab_id=${tabId} page_html_present=true page_html_length=${html.length}`);
+  } else {
+    console.warn(`[TRUSTINEL-DIAGNOSTIC] DOM_CAPTURE_FAILED tab_id=${tabId} page_html_present=false reason="content_script_and_injection_unavailable"`);
+  }
+  return html;
+}
+
 async function performScan(
   url: string,
-  sendResponse: (response: ScanMessageResponse) => void
+  sendResponse: (response: ScanMessageResponse) => void,
+  providedPageHtml?: string
 ): Promise<void> {
   const domain = normalizeDomain(url);
 
@@ -275,23 +361,27 @@ async function performScan(
   }
 
   scanningDomains.add(domain);
-  console.log("[TRUSTINEL] Starting scan for:", domain, "URL:", url);
+  console.log("[TRUSTINEL-DIAGNOSTIC] SCAN_INITIATED domain=", domain, "url=", url);
 
-  // Update badge to scanning state on the active tab
-  const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const activeTabId = activeTabs[0]?.id;
+  // Update badge to scanning state on resolved webpage tab
+  const activeTab = await resolveActiveWebpageTab(url);
+  const activeTabId = activeTab?.id;
+  console.log(`[TRUSTINEL-DIAGNOSTIC] TAB_RESOLVED activeTabId=${activeTabId ?? "NONE"} target_domain=${domain}`);
+
   if (activeTabId) {
     await updateBadge(activeTabId, "SCANNING");
   }
 
   try {
-    const pageHtml = activeTabId ? await getTabRenderedDom(activeTabId) : undefined;
+    const pageHtml = providedPageHtml || (activeTabId ? await getTabRenderedDom(activeTabId) : undefined);
+    console.log(`[TRUSTINEL-DIAGNOSTIC] API_REQUEST_PREPARED page_html_present=${Boolean(pageHtml)} page_html_length=${pageHtml?.length || 0}`);
     const data = await scanWebsite(url, pageHtml);
-    console.log("[TRUSTINEL] Scan completed. Score:", data.trust_report?.trust_score);
+    const contentSource = data.trust_report?.content_source || "unknown";
+    console.log(`[TRUSTINEL-DIAGNOSTIC] SCAN_COMPLETED score=${data.trust_report?.trust_score} content_source=${contentSource}`);
 
     if (data.trust_report) {
       const cached = buildCachedResult(domain, url, data);
-      await setCachedResult(domain, cached);
+      await setCachedResult(url, cached);
 
       const historyEntry = buildHistoryEntry(domain, data);
       await addToHistory(historyEntry);
@@ -357,13 +447,24 @@ async function performAutoScan(url: string, tabId: number): Promise<void> {
 
     if (data.trust_report) {
       const cached = buildCachedResult(domain, url, data);
-      await setCachedResult(domain, cached);
+      await setCachedResult(url, cached);
 
       const historyEntry = buildHistoryEntry(domain, data);
       await addToHistory(historyEntry);
 
       const effectiveLevel = (data.trust_report.overall_risk_level || data.trust_report.risk_level) as "LOW" | "MEDIUM" | "HIGH";
       await updateBadge(tabId, effectiveLevel);
+
+      // D3 fix: Send scan result to content script so the in-page Shadow DOM
+      // floating indicator stays synchronized with the background badge.
+      try {
+        chrome.tabs.sendMessage(tabId, {
+          type: "UPDATE_FLOATING_INDICATOR",
+          data: data.trust_report
+        });
+      } catch {
+        // Content script may not be available (e.g. tab closed)
+      }
     }
   } catch (err) {
     const msg = err instanceof ApiError ? err.message : String(err);
@@ -449,6 +550,24 @@ chrome.runtime.onMessage.addListener(function (
     if (domain) autoScannedDomains.add(domain);
     performScan(message.url, sendResponse as (r: ScanMessageResponse) => void);
     return true;
+  }
+
+  if (message.type === "SCAN_CURRENT_TAB_AUTO" && message.url) {
+    console.log("[TRUSTINEL] Received SCAN_CURRENT_TAB_AUTO:", message.url);
+    const domain = normalizeDomain(message.url);
+    if (domain) autoScannedDomains.add(domain);
+    performScan(message.url, sendResponse as (r: ScanMessageResponse) => void, message.page_html);
+    return true;
+  }
+
+  if (message.type === "OPEN_SIDE_PANEL") {
+    console.log("[TRUSTINEL] Received OPEN_SIDE_PANEL request.");
+    if (chrome.sidePanel && typeof chrome.sidePanel.open === "function") {
+      if (_sender.tab?.id) {
+        chrome.sidePanel.open({ tabId: _sender.tab.id }).catch((err) => console.error("Side panel open error:", err));
+      }
+    }
+    return false;
   }
 
   if (message.type === "GET_DOMAIN_STATE" && message.url) {

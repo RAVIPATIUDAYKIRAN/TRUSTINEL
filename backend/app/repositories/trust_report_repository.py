@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.trust_report import TrustReport
-from app.models.enums import RiskLevel
+from app.models.enums import RiskLevel, UserFacingVerdict
 from app.repositories.base import BaseRepository
 
 
@@ -32,6 +32,8 @@ class TrustReportRepository(BaseRepository):
         behavioral_risk_score: Optional[int] = None,
         overall_risk_score: Optional[int] = None,
         overall_risk_level: Optional[RiskLevel] = None,
+        user_facing_verdict: Optional[UserFacingVerdict] = None,
+        recommended_user_action: Optional[str] = None,
         risk_factors: Optional[List[str]] = None
     ) -> TrustReport:
         """
@@ -53,6 +55,8 @@ class TrustReportRepository(BaseRepository):
             behavioral_risk_score=behavioral_risk_score,
             overall_risk_score=overall_risk_score,
             overall_risk_level=overall_risk_level,
+            user_facing_verdict=user_facing_verdict,
+            recommended_user_action=recommended_user_action,
             risk_factors=json.dumps(risk_factors) if risk_factors is not None else None
         )
         self.add(report)

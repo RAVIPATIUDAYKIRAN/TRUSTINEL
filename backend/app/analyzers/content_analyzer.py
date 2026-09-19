@@ -66,6 +66,7 @@ class ContentAnalyzer:
         # ----------------------------------------------------------------------
         # 3. EXCESSIVE DISCOUNTS SIGNAL
         # ----------------------------------------------------------------------
+        moderate_discounts = [d for d in evidence.discount_percentages if d >= 50]
         high_discounts = [d for d in evidence.discount_percentages if d >= 70]
         extreme_discounts = [d for d in evidence.discount_percentages if d >= 85]
         if extreme_discounts:
@@ -77,12 +78,20 @@ class ContentAnalyzer:
                 reason=f"Extreme discount claimed ({max(extreme_discounts)}% OFF) often associated with deceptive storefronts."
             ))
         elif high_discounts:
-            raw_score += 12.0
+            raw_score += 15.0
+            signals.append(ContentScamSignal(
+                category=ContentScamCategory.EXCESSIVE_DISCOUNT,
+                severity="HIGH",
+                evidence=f"{max(high_discounts)}% OFF",
+                reason=f"Unusual high discount claimed ({max(high_discounts)}% OFF)."
+            ))
+        elif moderate_discounts:
+            raw_score += 10.0
             signals.append(ContentScamSignal(
                 category=ContentScamCategory.EXCESSIVE_DISCOUNT,
                 severity="MEDIUM",
-                evidence=f"{max(high_discounts)}% OFF",
-                reason=f"Unusual high discount claimed ({max(high_discounts)}% OFF)."
+                evidence=f"{max(moderate_discounts)}% OFF",
+                reason=f"High promotional discount claimed ({max(moderate_discounts)}% OFF)."
             ))
 
         # ----------------------------------------------------------------------
@@ -133,16 +142,35 @@ class ContentAnalyzer:
                 reason="High-risk credential or financial verification pressure detected."
             ))
 
+        # Addition 1: Cross-Domain Sensitive Form Target Hijacking
+        if evidence.has_cross_domain_sensitive_form:
+            raw_score += 50.0
+            target_evidence = ", ".join(evidence.form_action_targets[:2]) if evidence.form_action_targets else "External origin form target"
+            signals.append(ContentScamSignal(
+                category=ContentScamCategory.CREDENTIAL_HARVESTING,
+                severity="CRITICAL",
+                evidence=target_evidence,
+                reason="Cross-Domain Form Target Hijacking: Sensitive login, payment, or auth form submits data to an external, third-party destination."
+            ))
+
         # ----------------------------------------------------------------------
         # 7. BUSINESS TRANSPARENCY
         # ----------------------------------------------------------------------
-        if not evidence.has_contact_info and not evidence.has_policy_links:
+        if not evidence.has_contact_info:
             raw_score += 15.0
             signals.append(ContentScamSignal(
                 category=ContentScamCategory.BUSINESS_TRANSPARENCY,
                 severity="MEDIUM",
-                evidence="No contact information or policy pages found",
-                reason="Lack of verified business contact details (email/phone/address) and terms/privacy/return policies."
+                evidence="No verified business contact email or phone number found",
+                reason="Lack of verified business contact details (email/phone/address)."
+            ))
+        if not evidence.has_policy_links:
+            raw_score += 10.0
+            signals.append(ContentScamSignal(
+                category=ContentScamCategory.BUSINESS_TRANSPARENCY,
+                severity="MEDIUM",
+                evidence="No terms, privacy, or return policy pages found",
+                reason="Lack of terms of service, privacy policy, or refund policy pages."
             ))
 
         # Clamp final content risk score (0 = Safe, 100 = Extreme Risk)

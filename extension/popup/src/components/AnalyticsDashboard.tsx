@@ -240,7 +240,7 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
           <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1">
             {data.history_timeline.map((item, idx) => {
               const effectiveLevel = item.overall_risk_level || item.risk_level;
-              const effectiveScore = item.overall_risk_score ?? (item.risk_level === "HIGH" ? 85 : item.risk_level === "MEDIUM" ? 55 : 15);
+              const displayScore = item.overall_risk_score ?? "N/A";
 
               const riskBadgeClass =
                 effectiveLevel === "LOW"
@@ -254,7 +254,7 @@ export default function AnalyticsDashboard({ domain, isStaleCache }: AnalyticsDa
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-slate-300">{formatDate(item.scanned_at)}</span>
                     <div className="flex items-center gap-1.5">
-                      <span className="font-black text-slate-200">Scam Risk: {effectiveScore}</span>
+                      <span className="font-black text-slate-200">Scam Risk: {displayScore}</span>
                       <span className={`px-1.5 py-0.5 rounded border text-[9px] font-bold uppercase ${riskBadgeClass}`}>
                         {effectiveLevel}
                       </span>

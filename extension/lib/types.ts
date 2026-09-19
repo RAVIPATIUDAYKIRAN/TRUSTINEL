@@ -55,6 +55,16 @@ export interface ScanCurrentTabMessage {
   url: string;
 }
 
+export interface ScanCurrentTabAutoMessage {
+  type: "SCAN_CURRENT_TAB_AUTO";
+  url: string;
+  page_html?: string;
+}
+
+export interface OpenSidePanelMessage {
+  type: "OPEN_SIDE_PANEL";
+}
+
 export interface GetDomainStateMessage {
   type: "GET_DOMAIN_STATE";
   url: string;
@@ -70,6 +80,8 @@ export interface ClearScanHistoryMessage {
 
 export type PopupMessage =
   | ScanCurrentTabMessage
+  | ScanCurrentTabAutoMessage
+  | OpenSidePanelMessage
   | GetDomainStateMessage
   | GetScanHistoryMessage
   | ClearScanHistoryMessage;
@@ -145,10 +157,31 @@ export function normalizeDomain(url: string): string {
   return hostname.replace(/^www\./, "");
 }
 
+/** Normalize URL to a clean path key (e.g. example.com/checkout) */
+export function normalizeUrlKey(urlOrDomain: string): string {
+  if (!urlOrDomain) return "";
+  try {
+    const parsed = new URL(urlOrDomain.startsWith("http") ? urlOrDomain : `http://${urlOrDomain}`);
+    const domain = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    const pathname = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+    return pathname && pathname !== "/" ? `${domain}${pathname}` : domain;
+  } catch {
+    return urlOrDomain.replace(/^www\./, "").toLowerCase();
+  }
+}
+
 /** Storage key prefix for cached scan results */
 export const CACHE_KEY_PREFIX = "trustinel_cache_";
 
-export function cacheKey(domain: string): string {
+/** Path-aware storage key for cached scan results */
+export function cacheKey(urlOrDomain: string): string {
+  const key = normalizeUrlKey(urlOrDomain);
+  return `${CACHE_KEY_PREFIX}${key}`;
+}
+
+/** Fallback domain-level storage key for cached scan results */
+export function domainCacheKey(urlOrDomain: string): string {
+  const domain = normalizeDomain(urlOrDomain);
   return `${CACHE_KEY_PREFIX}${domain}`;
 }
 

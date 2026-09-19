@@ -37,6 +37,8 @@ class ExtractedWebsiteEvidence(BaseModel):
     is_sold_out_claimed: bool = False
     has_buy_or_checkout_button: bool = False
     payment_methods_claimed: List[str] = Field(default_factory=list)
+    form_action_targets: List[str] = Field(default_factory=list)
+    has_cross_domain_sensitive_form: bool = False
 
 
 class ContentAnalysisResult(BaseModel):
@@ -45,3 +47,4 @@ class ContentAnalysisResult(BaseModel):
     signals: List[ContentScamSignal] = Field(default_factory=list)
     extracted_evidence: Optional[ExtractedWebsiteEvidence] = None
     summary: str = "Content analysis complete."
+    content_source: str = Field(default="server_fetch", description="rendered_dom | server_fetch")

@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, Text, Enum, CheckConstrain
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
-from app.models.enums import RiskLevel
+from app.models.enums import RiskLevel, UserFacingVerdict
 
 if TYPE_CHECKING:
     from app.models.website_scan import WebsiteScan
@@ -115,6 +115,18 @@ class TrustReport(Base):
         nullable=True,
         default=None,
         doc="Aggregated overall scam risk level."
+    )
+    user_facing_verdict: Mapped[Optional[UserFacingVerdict]] = mapped_column(
+        Enum(UserFacingVerdict),
+        nullable=True,
+        default=None,
+        doc="User-facing verdict classification."
+    )
+    recommended_user_action: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        default=None,
+        doc="Clear, non-technical recommendation for users."
     )
     risk_factors: Mapped[Optional[str]] = mapped_column(
         Text,

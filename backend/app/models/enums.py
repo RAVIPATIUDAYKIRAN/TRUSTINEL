@@ -17,3 +17,16 @@ class RiskLevel(str, Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
+
+
+class UserFacingVerdict(str, Enum):
+    """
+    User-facing trust verdict classification.
+    """
+    LEGITIMATE = "LEGITIMATE"
+    PROBABLY_LEGITIMATE = "PROBABLY_LEGITIMATE"
+    SUSPICIOUS = "SUSPICIOUS"
+    LIKELY_SCAM = "LIKELY_SCAM"
+    HIGH_CONFIDENCE_SCAM = "HIGH_CONFIDENCE_SCAM"
+    UNKNOWN = "UNKNOWN"
+

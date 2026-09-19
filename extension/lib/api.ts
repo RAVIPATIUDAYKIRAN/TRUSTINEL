@@ -19,6 +19,14 @@ export interface AIThreatAnalysisResult {
   evidence_mappings: AIEvidenceMapping[];
 }
 
+export type UserFacingVerdict =
+  | "LEGITIMATE"
+  | "PROBABLY_LEGITIMATE"
+  | "SUSPICIOUS"
+  | "LIKELY_SCAM"
+  | "HIGH_CONFIDENCE_SCAM"
+  | "UNKNOWN";
+
 export interface TrustReport {
   id: string;
   scan_id: string;
@@ -37,7 +45,10 @@ export interface TrustReport {
   behavioral_risk_score?: number | null;
   overall_risk_score?: number | null;
   overall_risk_level?: "LOW" | "MEDIUM" | "HIGH" | null;
+  user_facing_verdict?: UserFacingVerdict | null;
+  recommended_user_action?: string | null;
   risk_factors?: string[];
+  content_source?: string | null;
 }
 
 export interface ScanResponse {

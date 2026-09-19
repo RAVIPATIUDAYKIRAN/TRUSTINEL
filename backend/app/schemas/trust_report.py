@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import Any, List, Optional
 from pydantic import BaseModel, Field, conint, model_validator
-from app.models.enums import RiskLevel
+from app.models.enums import RiskLevel, UserFacingVerdict
 
 
 def _safe_deserialize_list(value: Any) -> List[str]:
@@ -51,7 +51,12 @@ class TrustReportResponse(BaseModel):
     behavioral_risk_score: Optional[int] = Field(None, description="Domain age & behavioral anomaly risk score (0-100).")
     overall_risk_score: Optional[int] = Field(None, description="Aggregated overall scam risk score (0-100).")
     overall_risk_level: Optional[RiskLevel] = Field(None, description="Aggregated overall scam risk level.")
+    
+    user_facing_verdict: Optional[UserFacingVerdict] = Field(None, description="User-facing verdict classification.")
+    recommended_user_action: Optional[str] = Field(None, description="Clear, non-technical recommendation for users.")
+
     risk_factors: List[str] = Field(default_factory=list, description="Human-readable structured risk findings.")
+    content_source: Optional[str] = Field(None, description="rendered_dom | server_fetch content source identifier.")
 
     @model_validator(mode='before')
     @classmethod
@@ -86,6 +91,15 @@ class TrustReportResponse(BaseModel):
                 val = getattr(data, attr, None)
                 if val is not None and not isinstance(val, int):
                     object.__setattr__(data, attr, None)
+            uv_val = getattr(data, 'user_facing_verdict', None)
+            if uv_val is not None and not isinstance(uv_val, (str, UserFacingVerdict)):
+                object.__setattr__(data, 'user_facing_verdict', None)
+            rua_val = getattr(data, 'recommended_user_action', None)
+            if rua_val is not None and not isinstance(rua_val, str):
+                object.__setattr__(data, 'recommended_user_action', None)
+            cs_val = getattr(data, 'content_source', None)
+            if cs_val is not None and not isinstance(cs_val, str):
+                object.__setattr__(data, 'content_source', None)
             rf_val = getattr(data, 'risk_factors', None)
             object.__setattr__(data, 'risk_factors', _safe_deserialize_list(rf_val))
         return data

@@ -127,10 +127,25 @@ class ScanService:
             )
 
             # 6.5 Safely extract and analyze website content scam indicators
-            # Use client-rendered DOM HTML if provided by Chrome extension; fall back to server fetch
-            html_to_analyze = page_html if (page_html and isinstance(page_html, str) and page_html.strip()) else fetch_result.html_content
+            # Explicitly log content analysis source for audit transparency
+            is_rendered_dom = bool(page_html and isinstance(page_html, str) and page_html.strip())
+            content_source = "rendered_dom" if is_rendered_dom else "server_fetch"
+            html_to_analyze = page_html.strip() if is_rendered_dom else fetch_result.html_content
+
+            logger.info(
+                f"Content analysis source: {content_source}",
+                extra={
+                    "event": "content_analysis_source",
+                    "domain": domain,
+                    "content_source": content_source,
+                    "page_html_present": is_rendered_dom,
+                    "page_html_length": len(page_html) if is_rendered_dom else 0
+                }
+            )
+
             extracted_evidence = ContentExtractor.extract(html_to_analyze, normalized_url)
             content_result = self.content_analyzer.analyze(extracted_evidence)
+            content_result.content_source = content_source
 
             # 7. Compute deterministic technical trust evaluation (RuleBasedTrustEngine preserved untouched)
             trust_evaluation = self.trust_engine.evaluate(
@@ -184,7 +199,8 @@ class ScanService:
             logger.info(
                 f"[TRUSTINEL] Multi-Dimensional Analysis complete for {domain}. "
                 f"TechScore={trust_evaluation.trust_score}, ContentRisk={content_result.content_risk_score}, "
-                f"OverallScamRisk={multi_risk.overall_risk_score} ({multi_risk.overall_risk_level.value})"
+                f"OverallScamRisk={multi_risk.overall_risk_score} ({multi_risk.overall_risk_level.value}), "
+                f"Source={content_source}"
             )
 
             # Combine key risks with structured content risk factors
@@ -206,6 +222,8 @@ class ScanService:
                 behavioral_risk_score=multi_risk.behavioral_risk_score,
                 overall_risk_score=multi_risk.overall_risk_score,
                 overall_risk_level=multi_risk.overall_risk_level,
+                user_facing_verdict=multi_risk.user_facing_verdict,
+                recommended_user_action=multi_risk.recommended_user_action,
                 risk_factors=multi_risk.risk_factors
             )
             if isinstance(getattr(report, "trust_score", None), int):

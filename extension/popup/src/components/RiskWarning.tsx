@@ -14,7 +14,13 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
   // ---------------------------------------------------------------------------
   // HIGH RISK UI
   // ---------------------------------------------------------------------------
-  if (report.risk_level === "HIGH") {
+  const effectiveLevel = report.overall_risk_level || report.risk_level;
+  const effectiveScore = report.overall_risk_score ?? report.trust_score;
+
+  // ---------------------------------------------------------------------------
+  // HIGH RISK UI
+  // ---------------------------------------------------------------------------
+  if (effectiveLevel === "HIGH") {
     if (dismissed) {
       return (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-between">
@@ -68,10 +74,10 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
             </div>
             <div>
               <span className="text-xs font-black uppercase tracking-widest text-red-400">
-                HIGH RISK WARNING
+                HIGH SCAM RISK WARNING
               </span>
               <p className="text-[10px] font-medium text-slate-400">
-                Score: {report.trust_score} / 100
+                Scam Risk Score: {effectiveScore} / 100
               </p>
             </div>
           </div>
@@ -85,7 +91,7 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
         {/* Message */}
         <p className="text-xs text-slate-200 leading-relaxed font-medium">
           {report.summary ||
-            "This website shows elevated risk indicators based on the available security analysis."}
+            "This website shows elevated deceptive indicators based on multi-dimensional security analysis."}
         </p>
 
         {/* Top Key Risks */}
@@ -128,7 +134,7 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
   // ---------------------------------------------------------------------------
   // MEDIUM RISK UI
   // ---------------------------------------------------------------------------
-  if (report.risk_level === "MEDIUM") {
+  if (effectiveLevel === "MEDIUM") {
     return (
       <div className="p-3.5 rounded-xl bg-gradient-to-br from-amber-950/60 via-amber-900/20 to-slate-950 border border-amber-500/50 shadow-md flex flex-col gap-2.5 text-slate-100">
         <div className="flex items-center justify-between">
@@ -150,7 +156,7 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
               </svg>
             </div>
             <span className="text-xs font-black uppercase tracking-widest text-amber-400">
-              MEDIUM RISK CAUTION
+              MEDIUM SCAM RISK — USE CAUTION
             </span>
           </div>
           {isStale && (
@@ -162,7 +168,7 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
 
         <p className="text-xs text-slate-300 leading-relaxed font-medium">
           {report.summary ||
-            "This website shows mixed trust indicators and should be reviewed carefully."}
+            "This website presents mixed trust indicators requiring user caution."}
         </p>
 
         {topRisks.length > 0 && (
@@ -213,7 +219,7 @@ export default function RiskWarning({ report, isStale }: RiskWarningProps) {
           </svg>
         </div>
         <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest">
-          LOW RISK — Strong Trust Signals
+          LOW RISK — Clean Evidence Signals
         </span>
       </div>
       {isStale && (

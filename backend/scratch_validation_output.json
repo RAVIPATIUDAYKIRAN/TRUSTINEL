@@ -1,0 +1,47 @@
+[
+  {
+    "url": "https://www.amazon.in/",
+    "rendered_dom_capture_success": true,
+    "captured_dom_length": 799,
+    "content_source": "rendered_dom",
+    "policy_evidence": "Found (Privacy Notice / Conditions of Use detected)",
+    "contact_evidence": "Found (Customer Service / Support detected)",
+    "content_risk": 0,
+    "technical_risk": 95,
+    "behavioral_risk": 0,
+    "reputation_risk": 0,
+    "overall_risk": 0,
+    "user_facing_verdict": "LEGITIMATE",
+    "summary": "LOW RISK: Website shows clean technical security and no significant scam content indicators."
+  },
+  {
+    "url": "https://www.flipkart.com/",
+    "rendered_dom_capture_success": true,
+    "captured_dom_length": 799,
+    "content_source": "rendered_dom",
+    "policy_evidence": "Found (Privacy Notice / Conditions of Use detected)",
+    "contact_evidence": "Found (Customer Service / Support detected)",
+    "content_risk": 0,
+    "technical_risk": 65,
+    "behavioral_risk": 0,
+    "reputation_risk": 0,
+    "overall_risk": 0,
+    "user_facing_verdict": "PROBABLY_LEGITIMATE",
+    "summary": "LOW RISK: Website shows clean technical security and no significant scam content indicators."
+  },
+  {
+    "url": "https://python.org/",
+    "rendered_dom_capture_success": true,
+    "captured_dom_length": 799,
+    "content_source": "rendered_dom",
+    "policy_evidence": "Found (Privacy Notice / Conditions of Use detected)",
+    "contact_evidence": "Found (Customer Service / Support detected)",
+    "content_risk": 0,
+    "technical_risk": 100,
+    "behavioral_risk": 0,
+    "reputation_risk": 0,
+    "overall_risk": 0,
+    "user_facing_verdict": "LEGITIMATE",
+    "summary": "LOW RISK: Website shows clean technical security and no significant scam content indicators."
+  }
+]

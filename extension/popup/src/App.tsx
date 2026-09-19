@@ -74,21 +74,95 @@ function requestDomainState(url: string): Promise<DomainState> {
   });
 }
 
-function scanViaBackground(url: string): Promise<ScanResponse> {
-  return new Promise((resolve, reject) => {
+async function extractActiveTabDom(): Promise<string | undefined> {
+  return new Promise((resolve) => {
     try {
+      const tryTabId = (tabId: number) => {
+        chrome.tabs.sendMessage(tabId, { type: "GET_RENDERED_DOM" }, (res) => {
+          if (!chrome.runtime.lastError && res && res.success && res.html) {
+            resolve(res.html);
+            return;
+          }
+          try {
+            chrome.scripting.executeScript(
+              {
+                target: { tabId },
+                func: () => {
+                  if (!document.documentElement) return "";
+                  const clone = document.documentElement.cloneNode(true) as HTMLElement;
+                  const inputs = clone.querySelectorAll("input, textarea, select");
+                  inputs.forEach((el) => {
+                    const input = el as HTMLInputElement;
+                    const nameAttr = (input.name || "").toLowerCase();
+                    const typeAttr = (input.type || "").toLowerCase();
+                    if (typeAttr === "password" || nameAttr.includes("token") || nameAttr.includes("secret") || nameAttr.includes("cvv") || nameAttr.includes("card")) {
+                      input.value = "";
+                      input.removeAttribute("value");
+                    } else if (input.value) {
+                      input.value = "[REDACTED]";
+                    }
+                  });
+                  return clone.outerHTML ? clone.outerHTML.slice(0, 500000) : "";
+                },
+              },
+              (results) => {
+                if (!chrome.runtime.lastError && results?.[0]?.result) {
+                  resolve(String(results[0].result));
+                } else {
+                  resolve(undefined);
+                }
+              }
+            );
+          } catch {
+            resolve(undefined);
+          }
+        });
+      };
+
+      chrome.tabs.query({ active: true, windowType: "normal" }, (tabs) => {
+        const tabId = tabs[0]?.id;
+        if (tabId) {
+          tryTabId(tabId);
+        } else {
+          chrome.tabs.query({ active: true }, (allTabs) => {
+            const fallbackId = allTabs.find((t) => t.id && t.url && !isUnsupportedUrl(t.url))?.id;
+            if (fallbackId) tryTabId(fallbackId);
+            else resolve(undefined);
+          });
+        }
+      });
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
+
+function scanViaBackground(url: string): Promise<ScanResponse> {
+  return new Promise(async (resolve, reject) => {
+    const doDirectFallback = async () => {
+      try {
+        const pageHtml = await extractActiveTabDom();
+        const data = await scanWebsite(url, pageHtml);
+        resolve(data);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    try {
+      const pageHtml = await extractActiveTabDom();
       chrome.runtime.sendMessage(
-        { type: "SCAN_CURRENT_TAB", url },
+        { type: "SCAN_CURRENT_TAB_AUTO", url, page_html: pageHtml },
         (response: ScanMessageResponse) => {
           if (chrome.runtime.lastError) {
             const msg = chrome.runtime.lastError.message || "Service worker unavailable";
             console.warn("[TRUSTINEL] Background unavailable:", msg, "— falling back to direct API call");
-            scanWebsite(url).then(resolve).catch(reject);
+            doDirectFallback();
             return;
           }
           if (!response) {
             console.warn("[TRUSTINEL] No response from background — falling back to direct API call");
-            scanWebsite(url).then(resolve).catch(reject);
+            doDirectFallback();
             return;
           }
           if (response.success) {
@@ -101,7 +175,7 @@ function scanViaBackground(url: string): Promise<ScanResponse> {
       );
     } catch {
       console.warn("[TRUSTINEL] sendMessage threw — falling back to direct API call");
-      scanWebsite(url).then(resolve).catch(reject);
+      doDirectFallback();
     }
   });
 }
@@ -424,6 +498,27 @@ function App() {
         {/* --- RESULT State --- */}
         {activeTab === "report" && state === "RESULT" && scanResult?.trust_report && (
           <div className="flex flex-col px-5 py-5 gap-4">
+            {/* Content Analysis Source Transparency Badge */}
+            {scanResult.trust_report.content_source === "rendered_dom" ? (
+              <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                <span className="text-[10px] font-semibold uppercase tracking-widest">
+                  Source: Live Browser Rendered DOM
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-800/60 border border-slate-700/60 text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+                <span className="text-[10px] font-semibold uppercase tracking-widest">
+                  Source: Server HTTP Fetch (Fallback)
+                </span>
+              </div>
+            )}
+
             {/* Freshness indicator */}
             {isCached && cacheStatus === "FRESH" && (
               <div className="flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
