@@ -108,11 +108,8 @@ jobs:
       - name: Secret Scanning Audit
         run: |
           echo "Scanning codebase for unmasked secrets and credentials..."
-
           # Verify no committed raw OpenAI API keys (sk-...)
           ! grep -rnE "sk-[a-zA-Z0-9]{32,}" backend/app/ extension/lib/ || (echo "ERROR: Unmasked OpenAI API key pattern found!" && exit 1)
-
           # Verify no committed private keys
-          ! grep -rnE -- "-----BEGIN PRIVATE KEY-----" . || (echo "ERROR: Private key detected in repository!" && exit 1)
-
+          ! grep -rnE "-----BEGIN PRIVATE KEY-----" . || (echo "ERROR: Private key detected in repository!" && exit 1)
           echo "Secret scanning completed with zero hardcoded credentials detected."
