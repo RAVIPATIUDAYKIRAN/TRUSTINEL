@@ -70,7 +70,7 @@ jobs:
       - name: Run Backend Pytest Suite
         run: |
           cd backend
-          uv run pytest tests/ -v
+          PYTHONPATH=. uv run pytest tests/ -v
 
   extension-ci:
     name: Chrome Extension Build & Type Check

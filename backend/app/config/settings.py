@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENVIRONMENT.lower() == "production"
 
+    @property
+    def effective_cors_origin_regex(self) -> Optional[str]:
+        """
+        Returns CORS origin regex.
+        In production, wildcard chrome-extension regex is strictly disallowed.
+        """
+        if self.is_production:
+            if self.CORS_ORIGIN_REGEX == r"^chrome-extension://.*$":
+                return None
+        return self.CORS_ORIGIN_REGEX
+
     def get_safe_config_summary(self) -> Dict[str, Any]:
         """
         Returns a non-sensitive dictionary summary of current app configuration

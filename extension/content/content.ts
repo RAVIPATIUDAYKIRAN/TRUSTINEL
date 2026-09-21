@@ -37,13 +37,17 @@ function getRedactedRenderedDom(): string {
     inputs.forEach((el) => {
       const input = el as HTMLInputElement;
       const nameAttr = (input.name || "").toLowerCase();
+      const idAttr = (input.id || "").toLowerCase();
       const typeAttr = (input.type || "").toLowerCase();
       if (
         typeAttr === "password" ||
         nameAttr.includes("token") ||
         nameAttr.includes("secret") ||
         nameAttr.includes("cvv") ||
-        nameAttr.includes("card")
+        nameAttr.includes("card") ||
+        nameAttr.includes("auth") ||
+        idAttr.includes("token") ||
+        idAttr.includes("secret")
       ) {
         input.value = "";
         input.removeAttribute("value");
@@ -52,7 +56,23 @@ function getRedactedRenderedDom(): string {
       }
     });
 
-    // 2. D5: Redact contenteditable elements
+    // 2. Redact sensitive data attributes across all elements
+    const allElements = clone.querySelectorAll("*");
+    allElements.forEach((el) => {
+      for (const attr of Array.from(el.attributes)) {
+        const attrName = attr.name.toLowerCase();
+        if (
+          attrName.includes("token") ||
+          attrName.includes("secret") ||
+          attrName.includes("jwt") ||
+          attrName.includes("auth")
+        ) {
+          el.setAttribute(attr.name, "[REDACTED]");
+        }
+      }
+    });
+
+    // 3. D5: Redact contenteditable elements
     const editables = clone.querySelectorAll("[contenteditable=\"true\"], [contenteditable=\"\"]");
     editables.forEach((el) => {
       (el as HTMLElement).textContent = "[REDACTED]";
@@ -114,7 +134,7 @@ let isPopoverOpen = false;
 
 function initShadowDomIndicator() {
   if (shadowHost) return;
-  
+
   shadowHost = document.createElement("trustinel-indicator");
   shadowHost.id = "trustinel-indicator-host";
   shadowHost.style.cssText = "all: initial; position: fixed; z-index: 2147483647; top: 40%; right: 0; pointer-events: auto;";
@@ -167,27 +187,27 @@ function initShadowDomIndicator() {
       height: 7px;
       border-radius: 50%;
     }
-    
+
     /* Verdict Styles */
     .verdict-LEGITIMATE { color: #34d399; border-color: rgba(52, 211, 153, 0.4); }
     .verdict-LEGITIMATE .status-dot { background: #34d399; }
-    
+
     .verdict-PROBABLY_LEGITIMATE { color: #a7f3d0; border-color: rgba(167, 243, 208, 0.4); }
     .verdict-PROBABLY_LEGITIMATE .status-dot { background: #6ee7b7; }
-    
+
     .verdict-SUSPICIOUS { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
     .verdict-SUSPICIOUS .status-dot { background: #fbbf24; animation: pulse-slow 2s infinite; }
-    
+
     .verdict-LIKELY_SCAM { color: #f87171; border-color: rgba(248, 113, 113, 0.5); }
     .verdict-LIKELY_SCAM .status-dot { background: #ef4444; animation: pulse-fast 1s infinite; }
-    
+
     .verdict-HIGH_CONFIDENCE_SCAM { color: #fca5a5; border-color: rgba(239, 68, 68, 0.8); background: rgba(69, 10, 10, 0.95); }
     .verdict-HIGH_CONFIDENCE_SCAM .status-dot { background: #dc2626; box-shadow: 0 0 10px #dc2626; }
     .verdict-HIGH_CONFIDENCE_SCAM.attention-shake { animation: attention-shake 0.6s ease-in-out 3; }
-    
+
     .verdict-UNKNOWN, .verdict-LOADING { color: #94a3b8; border-color: rgba(148, 163, 184, 0.3); }
     .verdict-UNKNOWN .status-dot, .verdict-LOADING .status-dot { background: #94a3b8; }
-    
+
     .verdict-DISABLED { color: #64748b; border-color: rgba(100, 116, 139, 0.3); }
     .verdict-DISABLED .status-dot { background: #64748b; }
 
@@ -359,7 +379,7 @@ function initShadowDomIndicator() {
     </div>
     <div class="popover" id="popover">
       <div class="popover-header">
-        <span class="domain-name" id="pop-domain">${window.location.hostname}</span>
+        <span class="domain-name" id="pop-domain"></span>
         <button class="close-btn" id="pop-close">✕</button>
       </div>
       <div class="verdict-badge-box" id="verdict-box">
@@ -392,6 +412,8 @@ function initShadowDomIndicator() {
   // Event Listeners inside Shadow DOM
   const badge = shadowRoot.getElementById("badge");
   const popover = shadowRoot.getElementById("popover");
+  const popDomain = shadowRoot.getElementById("pop-domain");
+  if (popDomain) popDomain.textContent = window.location.hostname;
   const popClose = shadowRoot.getElementById("pop-close");
   const popFull = shadowRoot.getElementById("pop-full");
   const popDisable = shadowRoot.getElementById("pop-disable");
@@ -462,9 +484,36 @@ function updateIndicatorResult(data: any) {
   if (popSource) popSource.textContent = source;
 
   if (popBullets) {
-    popBullets.innerHTML = factors.length > 0
-      ? factors.slice(0, 4).map(f => `<div class="bullet-item"><span>⚠️</span><span>${f}</span></div>`).join("")
-      : `<div class="bullet-item"><span>✓</span><span>No high risk scam factors identified.</span></div>`;
+    popBullets.textContent = "";
+    if (factors.length > 0) {
+      factors.slice(0, 4).forEach((factor) => {
+        const item = document.createElement("div");
+        item.className = "bullet-item";
+
+        const icon = document.createElement("span");
+        icon.textContent = "⚠️";
+
+        const text = document.createElement("span");
+        text.textContent = String(factor);
+
+        item.appendChild(icon);
+        item.appendChild(text);
+        popBullets.appendChild(item);
+      });
+    } else {
+      const item = document.createElement("div");
+      item.className = "bullet-item";
+
+      const icon = document.createElement("span");
+      icon.textContent = "✓";
+
+      const text = document.createElement("span");
+      text.textContent = "No high risk scam factors identified.";
+
+      item.appendChild(icon);
+      item.appendChild(text);
+      popBullets.appendChild(item);
+    }
   }
 
   if (popProtStatus) {

@@ -54,7 +54,7 @@ class InternalHeuristicsThreatProvider(ThreatIntelligenceProvider):
         # Standard heuristics fallback returns UNKNOWN when no external threat API key is configured
         return ReputationThreatResult(
             status=ThreatReputationStatus.UNKNOWN,
-            reputation_score=100,
+            reputation_score=50,
             provider_name="internal_heuristics",
             matches_found=0,
             matched_lists=[],

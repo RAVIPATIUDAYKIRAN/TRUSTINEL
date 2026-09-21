@@ -11,11 +11,15 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "http://127.0.0.1:8000/*"
+    "http://127.0.0.1:8000/*",
+    "https://api.trustinel.org/*"
   ],
   "action": {
     "default_popup": "popup/index.html",
     "default_title": "TRUSTINEL"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
   },
   "side_panel": {
     "default_path": "popup/index.html"

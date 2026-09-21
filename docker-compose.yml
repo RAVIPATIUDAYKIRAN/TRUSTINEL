@@ -9,9 +9,9 @@ services:
     environment:
       - APP_NAME=TRUSTINEL
       - APP_VERSION=0.1.0
-      - ENVIRONMENT=production
-      - LOG_LEVEL=INFO
-      - LOG_FORMAT=json
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=text
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/trustinel
       - REDIS_URL=redis://redis:6379/0
       - DB_POOL_SIZE=10

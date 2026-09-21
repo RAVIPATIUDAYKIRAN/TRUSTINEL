@@ -1,7 +1,32 @@
-// TRUSTINEL API Client
-// Single source of truth for backend communication
+/**
+ * Resolves the API Base URL based on environment configuration.
+ * Development: http://127.0.0.1:8000
+ * Production: https://api.trustinel.org (configured via VITE_API_BASE_URL)
+ * Never downgrades HTTPS to HTTP in production mode.
+ */
+export function getApiBaseUrl(): string {
+  const metaEnv = (import.meta as any).env;
+  const envUrl = metaEnv && metaEnv.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === "string" && envUrl.trim().length > 0) {
+    const trimmed = envUrl.trim().replace(/\/+$/, "");
+    if (metaEnv && metaEnv.MODE === "production") {
+      if (!trimmed.startsWith("https://")) {
+        console.warn("[TRUSTINEL] Production build requires HTTPS API base URL. Enforcing HTTPS scheme.");
+        return trimmed.replace(/^http:\/\//i, "https://");
+      }
+    }
+    return trimmed;
+  }
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+  const isProd = metaEnv && metaEnv.MODE === "production";
+  if (isProd) {
+    return "https://api.trustinel.org";
+  }
+
+  return "http://127.0.0.1:8000";
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export interface AIEvidenceMapping {
   category: "SSL" | "WHOIS" | "SECURITY_HEADERS" | "REDIRECTS" | "DETERMINISTIC_TRUST" | string;
